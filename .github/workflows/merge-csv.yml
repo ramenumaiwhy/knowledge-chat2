@@ -1,0 +1,36 @@
+name: Merge CSV Files
+
+on:
+  push:
+    paths:
+      - 'data/updates.csv'
+  workflow_dispatch:
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    
+    - name: Install dependencies
+      run: npm install
+    
+    - name: Merge CSV files
+      run: npm run merge-csv
+    
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add data/knowledge.csv data/updates.csv
+        git diff --quiet && git diff --staged --quiet || git commit -m "Auto-merge CSV files"
+        git push

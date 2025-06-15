@@ -1,0 +1,197 @@
+{
+  "name": "LINE Chatbot with CSV Knowledge Base",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "line-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "LINE Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "1"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "file",
+        "operation": "get",
+        "owner": "={{ $env.GITHUB_OWNER }}",
+        "repository": "={{ $env.GITHUB_REPO }}",
+        "filePath": "data/knowledge.csv"
+      },
+      "name": "Get CSV from GitHub",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ユーザーメッセージを取得\nconst userMessage = $input.first().json.body.events[0].message.text;\nconst replyToken = $input.first().json.body.events[0].replyToken;\n\n// CSVデータを取得\nconst csvContent = $('Get CSV from GitHub').first().json.content;\nconst csvData = Buffer.from(csvContent, 'base64').toString('utf-8');\n\n// CSVをパース\nconst rows = csvData.split('\\n').map(row => {\n  const matches = row.match(/(?:^|,)(\"(?:[^\"]+|\"\")*\"|[^,]*)/g);\n  return matches ? matches.map(match => match.replace(/^,/, '').replace(/^\"|\"$/g, '')) : [];\n});\n\nconst headers = rows[0];\nconst data = rows.slice(1).filter(row => row.length > 0);\n\n// キーワード検索\nconst searchResults = [];\nfor (const row of data) {\n  const keywords = row[4] || ''; // keywords列\n  const question = row[2] || ''; // question列\n  const answer = row[3] || ''; // answer列\n  \n  if (keywords.toLowerCase().includes(userMessage.toLowerCase()) || \n      question.toLowerCase().includes(userMessage.toLowerCase())) {\n    searchResults.push({\n      category: row[1],\n      question: row[2],\n      answer: row[3],\n      source: row[5]\n    });\n  }\n}\n\nreturn {\n  userMessage,\n  replyToken,\n  searchResults,\n  hasResults: searchResults.length > 0\n};"
+      },
+      "name": "Search CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "3"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $env.GEMINI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contents",
+              "value": "=[{\"parts\":[{\"text\":\"あなたは親切なカスタマーサポートです。以下の情報を基に、ユーザーの質問に答えてください。\\n\\nユーザーの質問: {{ $json.userMessage }}\\n\\n関連情報:\\n{{ $json.searchResults.map(r => `- ${r.question}: ${r.answer}`).join('\\n') }}\\n\\n回答は簡潔で分かりやすく、敬語で答えてください。関連情報にない場合は『申し訳ございません、その情報は見つかりませんでした』と答えてください。\"}]}]"
+            }
+          ]
+        }
+      },
+      "name": "Call Gemini API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 300],
+      "id": "4"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINE_CHANNEL_ACCESS_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "replyToken",
+              "value": "={{ $('Search CSV').first().json.replyToken }}"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"type\":\"text\",\"text\":\"{{ $json.candidates[0].content.parts[0].text }}\"}]"
+            }
+          ]
+        }
+      },
+      "name": "Reply to LINE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1050, 300],
+      "id": "5"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "success"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "id": "6"
+    }
+  ],
+  "connections": {
+    "LINE Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get CSV from GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get CSV from GitHub": {
+      "main": [
+        [
+          {
+            "node": "Search CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search CSV": {
+      "main": [
+        [
+          {
+            "node": "Call Gemini API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Gemini API": {
+      "main": [
+        [
+          {
+            "node": "Reply to LINE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply to LINE": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

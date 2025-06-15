@@ -1,0 +1,33 @@
+# 環境変数
+.env
+.env.local
+.env.production
+
+# 依存関係
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ログ
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# テンポラリファイル
+*.tmp
+*.temp
+.cache/
+
+# n8n
+.n8n/
+n8n-data/
