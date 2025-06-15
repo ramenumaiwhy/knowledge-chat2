@@ -26,14 +26,20 @@
 4. 以下をコピペ（.envの内容をそのまま）:
 
 ```
-LINE_CHANNEL_ACCESS_TOKEN=ZYXENzJhD225b6FE6ufYq8hA6H7EFvR77sovwRd4kzsJLmGiv9gaNOFodY+8ddsapgFlJTFf2yzzY3FYGuvXfwRVEE4f+Nl30aSpt2bIesSnkjMFva7TWbLBtVB3Os3t+sukMR4MJZeaqfqYGt6AGQdB04t89/1O/w1cDnyilFU=
-LINE_CHANNEL_SECRET=ed364273343f02c13ce41050cb93470a
-GEMINI_API_KEY=AIzaSyDMflKhgtla1RPwrcIy9Yev6FRpQTSqUsA
+LINE_CHANNEL_ACCESS_TOKEN=（.envファイルからコピー）
+LINE_CHANNEL_SECRET=（.envファイルからコピー）
+GEMINI_API_KEY=（.envファイルからコピー）
 GITHUB_TOKEN=（ここに1️⃣でコピーしたトークンを貼る）
 GITHUB_OWNER=ramenumaiwhy
 GITHUB_REPO=knowledge-chat2
-N8N_BASIC_AUTH_PASSWORD=mypassword123
-N8N_ENCRYPTION_KEY=abc123xyz789
+N8N_BASIC_AUTH_PASSWORD=（任意の強力なパスワードを設定）
+N8N_ENCRYPTION_KEY=（下記コマンドで生成した値を貼る）
+```
+
+**N8N_ENCRYPTION_KEY の生成方法:**
+ターミナルで以下を実行:
+```bash
+openssl rand -hex 32
 ```
 
 5. 「Update Variables」をクリック
