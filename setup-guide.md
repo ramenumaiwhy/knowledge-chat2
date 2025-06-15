@@ -32,13 +32,25 @@ GEMINI_API_KEY=（.envファイルからコピー）
 GITHUB_TOKEN=（ここに1️⃣でコピーしたトークンを貼る）
 GITHUB_OWNER=ramenumaiwhy
 GITHUB_REPO=knowledge-chat2
-N8N_BASIC_AUTH_PASSWORD=（任意の強力なパスワードを設定）
+N8N_BASIC_AUTH_PASSWORD=（下記コマンドで生成した値を貼る）
 N8N_ENCRYPTION_KEY=（下記コマンドで生成した値を貼る）
 ```
 
-**N8N_ENCRYPTION_KEY の生成方法:**
-ターミナルで以下を実行:
+**セキュリティキーの自動生成方法:**
+
+ターミナルで以下を実行してコピペ用の値を生成:
 ```bash
+# 両方のキーを一度に生成
+echo "N8N_BASIC_AUTH_PASSWORD=$(openssl rand -base64 20)"
+echo "N8N_ENCRYPTION_KEY=$(openssl rand -hex 32)"
+```
+
+または個別に生成:
+```bash
+# パスワード生成（20文字の安全なパスワード）
+openssl rand -base64 20
+
+# 暗号化キー生成（64文字の16進数）
 openssl rand -hex 32
 ```
 
