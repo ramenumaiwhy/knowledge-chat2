@@ -1,26 +1,18 @@
-FROM n8nio/n8n:latest
+FROM node:18-alpine
 
-USER root
+WORKDIR /app
 
-# Install additional dependencies if needed
-RUN apk add --no-cache \
-    python3 \
-    py3-pip \
-    git
+# Copy package files
+COPY package*.json ./
 
-USER node
+# Install dependencies
+RUN npm install
 
-# Set environment variables
-ENV N8N_BASIC_AUTH_ACTIVE=true
-ENV N8N_BASIC_AUTH_USER=admin
-ENV N8N_HOST=0.0.0.0
-ENV N8N_PORT=${PORT:-5678}
-ENV N8N_PROTOCOL=https
-ENV WEBHOOK_URL=https://${RAILWAY_STATIC_URL}
-ENV N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+# Copy source code
+COPY . .
 
 # Expose port
-EXPOSE ${PORT:-5678}
+EXPOSE ${PORT:-3000}
 
-# Start n8n
-CMD ["n8n"]
+# Start Express.js LINE Bot
+CMD ["npm", "start"]
