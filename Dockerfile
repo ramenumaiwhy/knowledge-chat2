@@ -22,5 +22,5 @@ ENV N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
 # Expose port
 EXPOSE ${PORT:-5678}
 
-# Start n8n with PORT environment variable
-CMD ["sh", "-c", "n8n start --tunnel"]
+# Start n8n
+CMD ["n8n"]
