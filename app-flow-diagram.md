@@ -13,12 +13,6 @@ graph TB
     
     F[📚 NotebookLM] -.->|月1回手動更新| D
     
-    style A fill:#e1f5fe
-    style B fill:#c8e6c9
-    style C fill:#fff9c4
-    style D fill:#ffccbc
-    style E fill:#d1c4e9
-    style F fill:#f8bbd0
 ```
 
 ## 📊 詳細な処理フロー
@@ -52,11 +46,6 @@ graph LR
     D[📚 NotebookLM] -->|手動アップロード| E[🧠 知識の構造化]
     E -->|洞察を追記| A
     
-    style A fill:#e3f2fd
-    style B fill:#fff3e0
-    style C fill:#e8f5e9
-    style D fill:#fce4ec
-    style E fill:#f3e5f5
 ```
 
 ## 🏗️ インフラ構成
@@ -78,8 +67,6 @@ graph TB
     A <--> C
     A <--> D
     E -.-> D
-    
-    style A fill:#b3e5fc
 ```
 
 ## 💬 メッセージ処理の詳細
@@ -97,10 +84,6 @@ flowchart TD
     F --> H[Gemini APIで<br/>自然言語生成]
     G --> H
     H --> I[LINE返信]
-    
-    style A fill:#ffecb3
-    style H fill:#ce93d8
-    style I fill:#a5d6a7
 ```
 
 ## 🔐 セキュリティフロー
@@ -113,11 +96,6 @@ graph LR
     D[管理画面アクセス] -->|Basic認証| E[n8n Dashboard]
     
     F[Webhook] -->|署名検証| G[リクエスト処理]
-    
-    style A fill:#ffcdd2
-    style B fill:#f8bbd0
-    style D fill:#ff8a65
-    style E fill:#ffab91
 ```
 
 ## 📈 スケーリング戦略
@@ -131,12 +109,6 @@ graph TD
     C --> E[オプション1<br/>Cloudflare R2<br/>CSVキャッシュ]
     C --> F[オプション2<br/>Redis追加<br/>検索高速化]
     C --> G[オプション3<br/>複数n8nインスタンス]
-    
-    style A fill:#c5e1a5
-    style B fill:#fff59d
-    style E fill:#80deea
-    style F fill:#80cbc4
-    style G fill:#ce93d8
 ```
 
 ## 🎯 主要コンポーネントの役割
@@ -157,10 +129,4 @@ graph LR
     B -->|自動デプロイ| C[Railway]
     C -->|コンテナ起動| D[n8n稼働]
     D -->|Webhook待機| E[サービス開始]
-    
-    style A fill:#e8eaf6
-    style B fill:#c5cae9
-    style C fill:#9fa8da
-    style D fill:#7986cb
-    style E fill:#5c6bc0
 ```

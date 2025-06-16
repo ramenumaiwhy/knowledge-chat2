@@ -1,0 +1,62 @@
+{
+    "name": "LINE RAG Chatbot",
+    "nodes": [
+      {
+        "name": "LINE Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "parameters": {
+          "path": "line-webhook",
+          "responseMode": "lastNode"
+        }
+      },
+      {
+        "name": "Search Vector DB",
+        "type": "n8n-nodes-base.httpRequest",
+        "parameters": {
+          "method": "POST",
+          "url": "https://your-worker.workers.dev/search",
+          "body": {
+            "query": "={{ $json.events[0].message.text }}",
+            "topK": 3
+          }
+        }
+      },
+      {
+        "name": "Generate Answer",
+        "type": "n8n-nodes-base.httpRequest",
+        "parameters": {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
+          "headers": {
+            "x-goog-api-key": "YOUR_GEMINI_KEY"
+          },
+          "body": {
+            "contents": [{
+              "parts": [{
+                "text": "以下の情報を基に質問に答えてください。\n\n情報:\n{{ $json.results }}\n\n質問: {{ $('LINE Webhook').item.json.events[0].message.text }}"
+              }]
+            }]
+          }
+        }
+      },
+      {
+        "name": "Reply to LINE",
+        "type": "n8n-nodes-base.httpRequest",
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.line.me/v2/bot/message/reply",
+          "headers": {
+            "Authorization": "Bearer YOUR_LINE_TOKEN"
+          },
+          "body": {
+            "replyToken": "={{ $('LINE Webhook').item.json.events[0].replyToken }}",
+            "messages": [{
+              "type": "text",
+              "text": "={{ $json.candidates[0].content.parts[0].text }}"
+            }]
+          }
+        }
+      }
+    ]
+  }
+  
