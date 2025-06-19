@@ -54,7 +54,11 @@ app.post('/webhook', middleware(config), async (req, res) => {
         const headers = lines[0].split(',');
         console.log('Headers:', headers);
         
-        // キーワード検索（改善版）
+        // 質問分析
+        const queryAnalysis = analyzeQuery(userMessage);
+        console.log('Query analysis:', queryAnalysis);
+        
+        // 改善された検索
         const searchResults = [];
         const searchText = userMessage.toLowerCase();
         console.log('Searching for:', searchText);
@@ -91,26 +95,33 @@ app.post('/webhook', middleware(config), async (req, res) => {
             const category = row[4] || '';
             const keywords = row[6] || '';
             
-            // 検索（部分一致を改善）
-            const fieldsToSearch = [title, content, summary, keywords].join(' ').toLowerCase();
+            // スコアベースの検索
+            const score = calculateRelevanceScore(
+              userMessage,
+              queryAnalysis,
+              { title, content, summary, keywords, category }
+            );
             
-            if (fieldsToSearch.includes(searchText)) {
+            if (score > 0) {
               searchResults.push({
                 id: id,
                 title: title,
-                content: content.substring(0, 1000), // 1000文字に増やす
+                content: content.substring(0, 1500), // コンテキスト増加
                 summary: summary,
                 category: category,
-                keywords: keywords
+                keywords: keywords,
+                score: score
               });
               
-              console.log(`Found match in row ${i}: ${title}`);
+              console.log(`Found match in row ${i}: ${title} (score: ${score})`);
             }
           } catch (parseError) {
             console.error(`Error parsing row ${i}:`, parseError.message);
           }
         }
         
+        // スコアでソート
+        searchResults.sort((a, b) => b.score - a.score);
         console.log('Total search results:', searchResults.length);
         
         let replyText = '';
@@ -118,7 +129,7 @@ app.post('/webhook', middleware(config), async (req, res) => {
         if (searchResults.length > 0) {
           // Gemini APIで回答生成（モデル名を更新）
           try {
-            const selectedResults = searchResults.slice(0, 2); // 最大2件
+            const selectedResults = searchResults.slice(0, 3); // 最大3件に増加
             console.log('Sending to Gemini:', selectedResults.length, 'results');
             
             // Gemini 1.5 Flashモデルを使用
@@ -145,12 +156,17 @@ app.post('/webhook', middleware(config), async (req, res) => {
 10. 文を空行2行で区切る。
 11. データに基づいて回答する一方で、データを参照して回答していることをユーザーには伝わらない様に回答する。
 
+質問タイプ: ${queryAnalysis.type}
 ユーザーの質問: ${userMessage}
 
-関連データ:
-${selectedResults.map(r => `タイトル: ${r.title}\n内容: ${r.content}\n要約: ${r.summary}`).join('\n\n---\n\n')}
+関連データ（関連度順）:
+${selectedResults.map((r, idx) => `
+【データ${idx + 1}】関連度: ${r.score}/100
+タイトル: ${r.title}
+要約: ${r.summary}
+内容: ${r.content}`).join('\n\n')}
 
-上記のデータのみを使って、チバとして回答してください。`
+上記のデータを使って、ユーザーの質問に対して会話として自然に答えてください。質問の意図を理解し、最も関連性の高いデータを中心に回答を構成してください。`
                   }]
                 }]
               }
@@ -212,6 +228,71 @@ process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
   process.exit(0);
 });
+
+// 質問分析関数
+function analyzeQuery(query) {
+  const lowerQuery = query.toLowerCase();
+  
+  // 質問タイプの判定
+  let type = 'general';
+  if (query.includes('？') || query.includes('?') || 
+      query.match(/どう|なぜ|いつ|どこ|誰|何/)) {
+    type = 'question';
+  } else if (query.match(/相談|悩み|困って|助けて/)) {
+    type = 'consultation';
+  } else if (query.length < 10) {
+    type = 'keyword';
+  }
+  
+  // キーワード抽出（簡易版）
+  const keywords = query
+    .split(/[、。！？\s]+/)
+    .filter(word => word.length > 1);
+  
+  return {
+    type: type,
+    keywords: keywords,
+    originalQuery: query
+  };
+}
+
+// 関連性スコア計算関数
+function calculateRelevanceScore(query, queryAnalysis, data) {
+  let score = 0;
+  const lowerQuery = query.toLowerCase();
+  
+  // 各フィールドの重み
+  const weights = {
+    title: 30,
+    keywords: 25,
+    summary: 20,
+    content: 15,
+    category: 10
+  };
+  
+  // 完全一致ボーナス
+  const exactMatchBonus = 20;
+  
+  // 各フィールドでの検索
+  for (const [field, weight] of Object.entries(weights)) {
+    const fieldValue = (data[field] || '').toLowerCase();
+    
+    // 完全一致
+    if (fieldValue.includes(lowerQuery)) {
+      score += weight + exactMatchBonus;
+    }
+    
+    // キーワードマッチ
+    for (const keyword of queryAnalysis.keywords) {
+      if (fieldValue.includes(keyword.toLowerCase())) {
+        score += weight * 0.7;
+      }
+    }
+  }
+  
+  // 正規化（0-100）
+  return Math.min(100, Math.round(score));
+}
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
