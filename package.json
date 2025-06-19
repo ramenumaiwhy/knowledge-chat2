@@ -2,28 +2,27 @@
   "name": "knowledge-chat2",
   "version": "1.0.0",
   "description": "LINE chatbot with CSV knowledge base",
-  "main": "scripts/direct-line-integration.js",
+  "main": "webhook-server.js",
   "scripts": {
-    "start": "node scripts/direct-line-integration.js",
-    "dev": "nodemon scripts/direct-line-integration.js",
+    "start": "node webhook-server.js",
+    "dev": "nodemon webhook-server.js",
     "merge-csv": "node scripts/csv-merger.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
     "line",
     "chatbot",
-    "n8n",
     "csv"
   ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@line/bot-sdk": "^8.0.0",
-    "@supabase/supabase-js": "^2.50.0",
+    "axios": "^1.10.0",
     "csv-parse": "^5.6.0",
     "csv-stringify": "^6.5.2",
-    "express": "^4.18.0",
-    "dotenv": "^16.0.0"
+    "dotenv": "^16.0.0",
+    "express": "^4.18.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.0"

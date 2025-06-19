@@ -1,12 +1,18 @@
-FROM n8nio/n8n:latest
+FROM node:18-alpine
 
-# 環境変数の設定
-ENV N8N_HOST=0.0.0.0
-ENV N8N_PORT=5678
-ENV PORT=5678
-ENV WEBHOOK_URL=$RAILWAY_STATIC_URL
+WORKDIR /app
 
-# ポートの公開
-EXPOSE 5678
+# Copy package files
+COPY package*.json ./
 
-# デフォルトのコマンドを使用（CMDなし）
+# Install dependencies
+RUN npm install
+
+# Copy source code
+COPY . .
+
+# Expose port
+EXPOSE ${PORT:-3000}
+
+# Start webhook server
+CMD ["npm", "start"]
