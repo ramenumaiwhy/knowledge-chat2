@@ -1,18 +1,25 @@
-FROM node:18-alpine
+FROM n8nio/n8n:latest
 
-WORKDIR /app
+USER root
 
-# Copy package files
-COPY package*.json ./
+# 権限の修正
+RUN mkdir -p /home/node/.n8n && \
+    chown -R node:node /home/node/.n8n && \
+    chmod 700 /home/node/.n8n
 
-# Install dependencies
-RUN npm install
+USER node
 
-# Copy source code
-COPY . .
+# 環境変数の設定
+ENV N8N_HOST=0.0.0.0
+ENV N8N_PORT=5678
+ENV PORT=5678
+ENV N8N_PROTOCOL=https
+ENV WEBHOOK_URL=$RAILWAY_STATIC_URL
+ENV N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
 
-# Expose port
-EXPOSE ${PORT:-3000}
+# ポートの公開
+EXPOSE 5678
 
-# Start Express.js LINE Bot
-CMD ["npm", "start"]
+# エントリーポイントを直接指定
+ENTRYPOINT ["/usr/local/bin/node", "/usr/local/lib/node_modules/n8n/bin/n8n"]
+CMD ["start"]
