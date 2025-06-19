@@ -1,22 +1,23 @@
 const express = require('express');
-const { Client } = require('@line/bot-sdk');
+const { Client, middleware } = require('@line/bot-sdk');
 const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// LINE Bot設定
+// LINE Bot設定（直接埋め込み）
 const config = {
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
-  channelSecret: process.env.LINE_CHANNEL_SECRET
+  channelAccessToken: 'ZYXENzJhD225b6FE6ufYq8hA6H7EFvR77sovwRd4kzsJLmGiv9gaNOFodY+8ddsapgFlJTFf2yzzY3FYGuvXfwRVEE4f+Nl30aSpt2bIesSnkjMFva7TWbLBtVB3Os3t+sukMR4MJZeaqfqYGt6AGQdB04t89/1O/w1cDnyilFU=',
+  channelSecret: 'ed364273343f02c13ce41050cb93470a'
 };
 
 const client = new Client(config);
 
-// Webhook endpoint
-app.post('/webhook', express.json(), async (req, res) => {
+// LINE署名検証ミドルウェア
+app.post('/webhook', middleware(config), async (req, res) => {
   try {
+    console.log('Webhook received');
     const events = req.body.events;
     
     for (const event of events) {
@@ -24,19 +25,14 @@ app.post('/webhook', express.json(), async (req, res) => {
         const userMessage = event.message.text;
         const replyToken = event.replyToken;
         
-        // GitHubからCSVを取得
-        const csvResponse = await axios.get(
-          'https://api.github.com/repos/aiharataketo/knowledge-chat2/contents/data/knowledge.csv',
-          {
-            headers: {
-              'Authorization': `token ${process.env.GITHUB_TOKEN}`,
-              'Accept': 'application/vnd.github.v3+json'
-            }
-          }
-        );
+        console.log('User message:', userMessage);
+        
+        // GitHubからCSVを取得（公開URLを使用）
+        const csvUrl = 'https://raw.githubusercontent.com/aiharataketo/knowledge-chat2/main/data/knowledge.csv';
+        const csvResponse = await axios.get(csvUrl);
+        const csvContent = csvResponse.data;
         
         // CSVをパース
-        const csvContent = Buffer.from(csvResponse.data.content, 'base64').toString('utf-8');
         const rows = csvContent.split('\n').map(row => {
           const matches = row.match(/(?:^|,)("(?:[^"]+|"")*"|[^,]*)/g);
           return matches ? matches.map(match => match.replace(/^,/, '').replace(/^"|"$/g, '')) : [];
@@ -66,9 +62,11 @@ app.post('/webhook', express.json(), async (req, res) => {
           }
         }
         
+        console.log('Search results:', searchResults.length);
+        
         // Gemini APIで回答生成
         const geminiResponse = await axios.post(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=AIzaSyDMflKhgtla1RPwrcIy9Yev6FRpQTSqUsA',
           {
             contents: [{
               parts: [{
@@ -77,7 +75,7 @@ app.post('/webhook', express.json(), async (req, res) => {
 ユーザーの質問: ${userMessage}
 
 関連情報:
-${searchResults.map(r => `【${r.title}】\n${r.summary}\n対象: ${r.target_group} / ${r.occupation}`).join('\n\n')}
+${searchResults.slice(0, 3).map(r => `【${r.title}】\n${r.summary}\n対象: ${r.target_group} / ${r.occupation}`).join('\n\n')}
 
 回答は簡潔で分かりやすく、敬語で答えてください。関連情報にない場合は『申し訳ございません、その情報は見つかりませんでした』と答えてください。`
               }]
@@ -87,18 +85,23 @@ ${searchResults.map(r => `【${r.title}】\n${r.summary}\n対象: ${r.target_gro
         
         const replyText = geminiResponse.data.candidates[0].content.parts[0].text;
         
+        console.log('Replying...');
+        
         // LINEに返信
         await client.replyMessage(replyToken, {
           type: 'text',
           text: replyText
         });
+        
+        console.log('Reply sent');
       }
     }
     
-    res.status(200).json({ status: 'success' });
+    res.status(200).send('OK');
   } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Error:', error.response?.data || error.message);
+    // LINEは200を返さないと再送してくるので、エラーでも200を返す
+    res.status(200).send('OK');
   }
 });
 
