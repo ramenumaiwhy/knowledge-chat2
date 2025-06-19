@@ -98,7 +98,7 @@ app.post('/webhook', middleware(config), async (req, res) => {
               searchResults.push({
                 id: id,
                 title: title,
-                content: content.substring(0, 500), // 最初の500文字のみ
+                content: content.substring(0, 1000), // 1000文字に増やす
                 summary: summary,
                 category: category,
                 keywords: keywords
@@ -116,13 +116,14 @@ app.post('/webhook', middleware(config), async (req, res) => {
         let replyText = '';
         
         if (searchResults.length > 0) {
-          // Gemini APIで回答生成
+          // Gemini APIで回答生成（モデル名を更新）
           try {
             const selectedResults = searchResults.slice(0, 2); // 最大2件
             console.log('Sending to Gemini:', selectedResults.length, 'results');
             
+            // Gemini 1.5 Flashモデルを使用
             const geminiResponse = await axios.post(
-              'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=AIzaSyDMflKhgtla1RPwrcIy9Yev6FRpQTSqUsA',
+              'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyDMflKhgtla1RPwrcIy9Yev6FRpQTSqUsA',
               {
                 contents: [{
                   parts: [{
@@ -159,7 +160,28 @@ ${selectedResults.map(r => `タイトル: ${r.title}\n内容: ${r.content}\n要�
             console.log('Gemini response received');
           } catch (geminiError) {
             console.error('Gemini API error:', geminiError.response?.data || geminiError.message);
-            replyText = 'チバです。\n\n申し訳ございません。\n\n現在システムに問題が発生しています。\n\n\nしばらく時間を置いて再度お試しください。';
+            
+            // Gemini APIが失敗した場合、検索結果を直接返す
+            if (searchResults.length > 0) {
+              const result = searchResults[0];
+              replyText = `チバです。
+
+その質問について、
+私の経験からお話しします。
+
+
+${result.summary}
+
+
+詳しくは、
+「${result.title}」という記事で触れています。
+
+
+他にご質問があれば、
+お聞かせください。`;
+            } else {
+              replyText = 'チバです。\n\nその質問について、\n私の経験の中では該当する情報がありません。\n\n\n別の質問があれば、\nぜひお聞かせください。';
+            }
           }
         } else {
           replyText = 'チバです。\n\nその質問について、\n私の経験の中では該当する情報がありません。\n\n\n別の質問があれば、\nぜひお聞かせください。';
