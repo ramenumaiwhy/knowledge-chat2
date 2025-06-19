@@ -1,7 +1,6 @@
 const express = require('express');
 const { Client, middleware } = require('@line/bot-sdk');
 const axios = require('axios');
-require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,11 +13,24 @@ const config = {
 
 const client = new Client(config);
 
+// ヘルスチェック（最初に定義）
+app.get('/', (req, res) => {
+  res.send('LINE Bot is running!');
+});
+
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // LINE署名検証ミドルウェア
 app.post('/webhook', middleware(config), async (req, res) => {
   try {
     console.log('Webhook received');
     const events = req.body.events;
+    
+    if (!events || events.length === 0) {
+      return res.status(200).send('OK');
+    }
     
     for (const event of events) {
       if (event.type === 'message' && event.message.type === 'text') {
@@ -64,26 +76,37 @@ app.post('/webhook', middleware(config), async (req, res) => {
         
         console.log('Search results:', searchResults.length);
         
-        // Gemini APIで回答生成
-        const geminiResponse = await axios.post(
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=AIzaSyDMflKhgtla1RPwrcIy9Yev6FRpQTSqUsA',
-          {
-            contents: [{
-              parts: [{
-                text: `あなたは恋愛アドバイザーです。以下の情報を基に、ユーザーの質問に答えてください。
+        let replyText = '';
+        
+        if (searchResults.length > 0) {
+          // Gemini APIで回答生成
+          try {
+            const geminiResponse = await axios.post(
+              'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=AIzaSyDMflKhgtla1RPwrcIy9Yev6FRpQTSqUsA',
+              {
+                contents: [{
+                  parts: [{
+                    text: `あなたは恋愛アドバイザーです。以下の情報を基に、ユーザーの質問に答えてください。
 
 ユーザーの質問: ${userMessage}
 
 関連情報:
 ${searchResults.slice(0, 3).map(r => `【${r.title}】\n${r.summary}\n対象: ${r.target_group} / ${r.occupation}`).join('\n\n')}
 
-回答は簡潔で分かりやすく、敬語で答えてください。関連情報にない場合は『申し訳ございません、その情報は見つかりませんでした』と答えてください。`
-              }]
-            }]
+回答は簡潔で分かりやすく、敬語で答えてください。`
+                  }]
+                }]
+              }
+            );
+            
+            replyText = geminiResponse.data.candidates[0].content.parts[0].text;
+          } catch (geminiError) {
+            console.error('Gemini API error:', geminiError.response?.data || geminiError.message);
+            replyText = `関連情報が見つかりました：\n\n${searchResults.slice(0, 2).map(r => `【${r.title}】\n${r.summary}`).join('\n\n')}`;
           }
-        );
-        
-        const replyText = geminiResponse.data.candidates[0].content.parts[0].text;
+        } else {
+          replyText = '申し訳ございません、その情報は見つかりませんでした。他にご質問がございましたらお聞かせください。';
+        }
         
         console.log('Replying...');
         
@@ -105,11 +128,13 @@ ${searchResults.slice(0, 3).map(r => `【${r.title}】\n${r.summary}\n対象: ${
   }
 });
 
-// ヘルスチェック
-app.get('/', (req, res) => {
-  res.send('LINE Bot is running!');
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  process.exit(0);
 });
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log('Webhook URL: /webhook');
 });
