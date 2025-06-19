@@ -41,49 +41,86 @@ app.post('/webhook', middleware(config), async (req, res) => {
         
         // GitHubからCSVを取得（正しいURLを使用）
         const csvUrl = 'https://raw.githubusercontent.com/ramenumaiwhy/knowledge-chat2/main/data/knowledge.csv';
+        console.log('Fetching CSV from:', csvUrl);
+        
         const csvResponse = await axios.get(csvUrl);
         const csvContent = csvResponse.data;
+        console.log('CSV content length:', csvContent.length);
         
-        // CSVをパース
-        const rows = csvContent.split('\n').map(row => {
-          const matches = row.match(/(?:^|,)("(?:[^"]+|"")*"|[^,]*)/g);
-          return matches ? matches.map(match => match.replace(/^,/, '').replace(/^"|"$/g, '')) : [];
-        });
+        // CSVをパース（より堅牢なパーサー）
+        const lines = csvContent.split('\n');
+        console.log('Total lines:', lines.length);
         
-        const headers = rows[0];
-        const data = rows.slice(1).filter(row => row.length > 0);
+        const headers = lines[0].split(',');
+        console.log('Headers:', headers);
         
-        // キーワード検索
+        // キーワード検索（改善版）
         const searchResults = [];
-        for (const row of data) {
-          const title = row[1] || '';
-          const content = row[2] || '';
-          const summary = row[3] || '';
-          const keywords = row[6] || '';
+        const searchText = userMessage.toLowerCase();
+        console.log('Searching for:', searchText);
+        
+        // ヘッダー行をスキップして、各行を処理
+        for (let i = 1; i < lines.length; i++) {
+          if (!lines[i] || lines[i].trim() === '') continue;
           
-          const searchText = userMessage.toLowerCase();
-          if (keywords.toLowerCase().includes(searchText) || 
-              title.toLowerCase().includes(searchText) ||
-              summary.toLowerCase().includes(searchText) ||
-              content.toLowerCase().includes(searchText)) {
-            searchResults.push({
-              title: title,
-              content: content,
-              summary: summary,
-              category: row[4],
-              target_group: row[8],
-              occupation: row[9]
-            });
+          try {
+            // CSVの行をパース（引用符を考慮）
+            const row = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let j = 0; j < lines[i].length; j++) {
+              const char = lines[i][j];
+              
+              if (char === '"') {
+                inQuotes = !inQuotes;
+              } else if (char === ',' && !inQuotes) {
+                row.push(current.trim());
+                current = '';
+              } else {
+                current += char;
+              }
+            }
+            row.push(current.trim());
+            
+            // 各列のデータを取得
+            const id = row[0] || '';
+            const title = row[1] || '';
+            const content = row[2] || '';
+            const summary = row[3] || '';
+            const category = row[4] || '';
+            const keywords = row[6] || '';
+            
+            // 検索（部分一致を改善）
+            const fieldsToSearch = [title, content, summary, keywords].join(' ').toLowerCase();
+            
+            if (fieldsToSearch.includes(searchText)) {
+              searchResults.push({
+                id: id,
+                title: title,
+                content: content.substring(0, 500), // 最初の500文字のみ
+                summary: summary,
+                category: category,
+                keywords: keywords
+              });
+              
+              console.log(`Found match in row ${i}: ${title}`);
+            }
+          } catch (parseError) {
+            console.error(`Error parsing row ${i}:`, parseError.message);
           }
         }
         
-        console.log('Search results:', searchResults.length);
+        console.log('Total search results:', searchResults.length);
         
         let replyText = '';
         
         if (searchResults.length > 0) {
           // Gemini APIで回答生成
           try {
+            const selectedResults = searchResults.slice(0, 2); // 最大2件
+            console.log('Sending to Gemini:', selectedResults.length, 'results');
+            
             const geminiResponse = await axios.post(
               'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=AIzaSyDMflKhgtla1RPwrcIy9Yev6FRpQTSqUsA',
               {
@@ -110,7 +147,7 @@ app.post('/webhook', middleware(config), async (req, res) => {
 ユーザーの質問: ${userMessage}
 
 関連データ:
-${searchResults.slice(0, 2).map(r => `タイトル: ${r.title}\n内容: ${r.content}\n要約: ${r.summary}`).join('\n\n---\n\n')}
+${selectedResults.map(r => `タイトル: ${r.title}\n内容: ${r.content}\n要約: ${r.summary}`).join('\n\n---\n\n')}
 
 上記のデータのみを使って、チバとして回答してください。`
                   }]
@@ -119,6 +156,7 @@ ${searchResults.slice(0, 2).map(r => `タイトル: ${r.title}\n内容: ${r.cont
             );
             
             replyText = geminiResponse.data.candidates[0].content.parts[0].text;
+            console.log('Gemini response received');
           } catch (geminiError) {
             console.error('Gemini API error:', geminiError.response?.data || geminiError.message);
             replyText = 'チバです。\n\n申し訳ございません。\n\n現在システムに問題が発生しています。\n\n\nしばらく時間を置いて再度お試しください。';
