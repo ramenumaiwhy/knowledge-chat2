@@ -39,8 +39,8 @@ app.post('/webhook', middleware(config), async (req, res) => {
         
         console.log('User message:', userMessage);
         
-        // GitHubからCSVを取得（公開URLを使用）
-        const csvUrl = 'https://raw.githubusercontent.com/aiharataketo/knowledge-chat2/main/data/knowledge.csv';
+        // GitHubからCSVを取得（正しいURLを使用）
+        const csvUrl = 'https://raw.githubusercontent.com/ramenumaiwhy/knowledge-chat2/main/data/knowledge.csv';
         const csvResponse = await axios.get(csvUrl);
         const csvContent = csvResponse.data;
         
