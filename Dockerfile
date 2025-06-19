@@ -2,17 +2,18 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
+# Copy only package files first for better caching
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install production dependencies only
+RUN npm ci --only=production
 
-# Copy source code
-COPY . .
+# Copy only necessary files
+COPY webhook-server.js ./
+COPY data ./data/
 
 # Expose port
 EXPOSE ${PORT:-3000}
 
 # Start webhook server
-CMD ["npm", "start"]
+CMD ["node", "webhook-server.js"]
