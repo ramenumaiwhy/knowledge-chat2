@@ -1,0 +1,450 @@
+{
+  "name": "LINE Chatbot with CSDS Enhanced",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "line-webhook-csds",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "LINE Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "webhook",
+      "webhookId": "line-csds-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$node['LINE Webhook'].json.body.events[0].type}}",
+              "operation": "equal",
+              "value2": "message"
+            }
+          ]
+        }
+      },
+      "name": "Filter Message Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "filter"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract message and analyze query type\nconst userMessage = $input.first().json.body.events[0].message.text;\nconst replyToken = $input.first().json.body.events[0].replyToken;\n\n// Simple query analysis\nlet queryType = 'general';\nif (userMessage.match(/こんにちは|おはよう|こんばんは|はじめまして/)) {\n  queryType = 'greeting';\n} else if (userMessage.match(/どうすれば|教えて|困って|悩んで/)) {\n  queryType = 'consultation';\n} else if (userMessage.includes('？') || userMessage.includes('?')) {\n  queryType = 'question';\n}\n\n// Extract keywords\nconst keywords = userMessage.match(/[\\u4e00-\\u9faf\\u3040-\\u309f\\u30a0-\\u30ff]{2,}/g) || [];\n\nreturn {\n  userMessage,\n  replyToken,\n  queryType,\n  keywords: keywords.slice(0, 5) // Top 5 keywords\n};"
+      },
+      "name": "Analyze Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 280],
+      "id": "analyze"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/search_knowledge",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query_text",
+              "value": "={{$json.userMessage}}"
+            },
+            {
+              "name": "match_threshold",
+              "value": "0.7"
+            },
+            {
+              "name": "match_count",
+              "value": "5"
+            }
+          ]
+        }
+      },
+      "name": "Supabase Vector Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 200],
+      "id": "supabase",
+      "onError": "continueOnFail"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "file",
+        "operation": "get",
+        "owner": "={{$env.GITHUB_OWNER}}",
+        "repository": "={{$env.GITHUB_REPO}}",
+        "filePath": "data/knowledge.csv"
+      },
+      "name": "Fallback: Get CSV",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [850, 400],
+      "id": "csv",
+      "executeOnError": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine results from Supabase and CSV\nconst supabaseResults = $('Supabase Vector Search').first()?.json?.data || [];\nconst hasSupabaseResults = supabaseResults.length > 0;\n\nlet searchResults = [];\n\nif (hasSupabaseResults) {\n  // Use Supabase results\n  searchResults = supabaseResults.map(r => ({\n    title: r.title,\n    content: r.content,\n    summary: r.summary,\n    score: r.similarity\n  }));\n} else {\n  // Fallback to CSV search\n  const csvContent = $('Fallback: Get CSV').first()?.json?.content || '';\n  const csvData = Buffer.from(csvContent, 'base64').toString('utf-8');\n  const userMessage = $('Analyze Query').first().json.userMessage.toLowerCase();\n  \n  // Parse CSV and search\n  const rows = csvData.split('\\n').slice(1);\n  for (const row of rows) {\n    const cols = row.split(',');\n    if (cols.length > 3) {\n      const question = cols[2] || '';\n      const answer = cols[3] || '';\n      const keywords = cols[4] || '';\n      \n      if (question.toLowerCase().includes(userMessage) || \n          keywords.toLowerCase().includes(userMessage)) {\n        searchResults.push({\n          title: question,\n          content: answer,\n          summary: keywords,\n          score: 0.8\n        });\n      }\n    }\n  }\n}\n\nreturn {\n  ...($('Analyze Query').first().json),\n  searchResults: searchResults.slice(0, 3),\n  hasResults: searchResults.length > 0,\n  searchMethod: hasSupabaseResults ? 'vector' : 'keyword'\n};"
+      },
+      "name": "Merge Search Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300],
+      "id": "merge"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{$env.GEMINI_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contents",
+              "value": "=[{\"parts\":[{\"text\":\"あなたはナンパ師『チバ』です。以下の特徴を守って回答してください:\\n\\n【チバの文体特徴】\\n- 『チバです。』で始める\\n- 『なぜか？』などの自問自答を使う\\n- 『〜と思うかもしれません』で読者の心理を先読みする\\n- 『ガンガン』『ゴリゴリ』などの特徴的な語彙を使う\\n- 短い段落で改行を多用する\\n\\nユーザーの質問: {{$json.userMessage}}\\n\\n参考情報:\\n{{$json.searchResults.map(r => `- ${r.title}: ${r.content}`).join('\\\\n')}}\\n\\n自然で説得力のある回答を生成してください。\"}]}]"
+            }
+          ]
+        }
+      },
+      "name": "Generate with Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 300],
+      "id": "gemini"
+    },
+    {
+      "parameters": {
+        "operation": "both",
+        "textField": "generatedText",
+        "queryType": "={{$('Analyze Query').first().json.queryType}}",
+        "styleIntensity": 0.7,
+        "minScore": 50,
+        "maxRetries": 3
+      },
+      "name": "Apply Chiba Style",
+      "type": "chibaStyle",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "id": "csds"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.chibaStyle.validation.totalScore}}",
+              "operation": "greaterEqual",
+              "value2": 60
+            }
+          ]
+        }
+      },
+      "name": "Check Quality Score",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1650, 300],
+      "id": "quality"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare best response\nconst chibaResult = $('Apply Chiba Style').first().json.chibaStyle;\nconst finalText = chibaResult.styledText || chibaResult.originalText;\nconst score = chibaResult.validation.totalScore;\nconst grade = chibaResult.validation.grade;\n\n// Add debug info in development\nlet debugInfo = '';\nif ($env.NODE_ENV === 'development') {\n  debugInfo = `\\n\\n[スコア: ${score}/100 (${grade})]`;\n}\n\nreturn {\n  replyToken: $('Analyze Query').first().json.replyToken,\n  responseText: finalText + debugInfo,\n  score,\n  grade,\n  attempts: chibaResult.attempts || 1\n};"
+      },
+      "name": "Prepare Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1850, 280],
+      "id": "prepare"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.GEMINI_API_KEY ? 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent' : 'skip'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{$env.GEMINI_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contents",
+              "value": "=[{\"parts\":[{\"text\":\"以下の回答をもっとチバらしく書き直してください。必ず『なぜか？』という自問自答を含め、『ガンガン』『ゴリゴリ』などの語彙を増やしてください:\\n\\n{{$json.chibaStyle.originalText}}\\n\\n重要：チバです。で始めて、結論。で終わること。\"}]}]"
+            }
+          ]
+        }
+      },
+      "name": "Regenerate (Low Score)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1850, 420],
+      "id": "regenerate"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.LINE_CHANNEL_ACCESS_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "replyToken",
+              "value": "={{$json.replyToken}}"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"type\":\"text\",\"text\":\"{{$json.responseText}}\"}]"
+            }
+          ]
+        }
+      },
+      "name": "Reply to LINE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2050, 300],
+      "id": "reply"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log performance metrics\nconst metrics = {\n  timestamp: new Date().toISOString(),\n  userMessage: $('Analyze Query').first().json.userMessage,\n  queryType: $('Analyze Query').first().json.queryType,\n  searchMethod: $('Merge Search Results').first().json.searchMethod,\n  searchResultsCount: $('Merge Search Results').first().json.searchResults.length,\n  chibaScore: $('Prepare Response').first().json.score,\n  chibaGrade: $('Prepare Response').first().json.grade,\n  attempts: $('Prepare Response').first().json.attempts,\n  responseTime: Date.now() - $input.first().json.startTime\n};\n\nconsole.log('Performance Metrics:', metrics);\n\n// Could save to database for analysis\nreturn metrics;"
+      },
+      "name": "Log Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2250, 300],
+      "id": "metrics"
+    }
+  ],
+  "connections": {
+    "LINE Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filter Message Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Message Type": {
+      "main": [
+        [
+          {
+            "node": "Analyze Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Query": {
+      "main": [
+        [
+          {
+            "node": "Supabase Vector Search",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fallback: Get CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Vector Search": {
+      "main": [
+        [
+          {
+            "node": "Merge Search Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback: Get CSV": {
+      "main": [
+        [
+          {
+            "node": "Merge Search Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Search Results": {
+      "main": [
+        [
+          {
+            "node": "Generate with Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate with Gemini": {
+      "main": [
+        [
+          {
+            "node": "Apply Chiba Style",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Chiba Style": {
+      "main": [
+        [
+          {
+            "node": "Check Quality Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Quality Score": {
+      "main": [
+        [
+          {
+            "node": "Prepare Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Regenerate (Low Score)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Response": {
+      "main": [
+        [
+          {
+            "node": "Reply to LINE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Regenerate (Low Score)": {
+      "main": [
+        [
+          {
+            "node": "Apply Chiba Style",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply to LINE": {
+      "main": [
+        [
+          {
+            "node": "Log Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionTimeout": 30,
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "tags": [
+    {
+      "name": "LINE Bot",
+      "createdAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "CSDS",
+      "createdAt": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}

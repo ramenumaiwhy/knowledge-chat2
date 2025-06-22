@@ -7,7 +7,10 @@
     "start": "node webhook-server.js",
     "dev": "nodemon webhook-server.js",
     "merge-csv": "node scripts/csv-merger.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "deploy-n8n": "node scripts/deploy-csds-workflow.js",
+    "test-csds": "node test/test-csds.js",
+    "analyze-style": "node scripts/style-analyzer.js"
   },
   "keywords": [
     "line",
