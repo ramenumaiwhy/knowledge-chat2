@@ -131,24 +131,30 @@ class CSDSTestSuite {
       console.log('-'.repeat(50));
       
       const result = await this.validator.validate(testText.text);
-      const report = this.validator.generateDetailedReport(testText.text, result);
       
       console.log('\n【検証結果】');
-      console.log(`総合スコア: ${result.overallScore}/100`);
+      console.log(`総合スコア: ${result.totalScore}/100`);
+      console.log(`成績: ${result.grade}`);
       console.log(`チバらしさ判定: ${result.isAuthentic ? '✅ 合格' : '❌ 不合格'}`);
       
       console.log('\n【詳細スコア】');
-      console.log(`語彙: ${result.scores.vocabulary.toFixed(1)}/100`);
-      console.log(`構造: ${result.scores.structure.toFixed(1)}/100`);
-      console.log(`修辞: ${result.scores.rhetoric.toFixed(1)}/100`);
-      console.log(`感情: ${result.scores.emotion.toFixed(1)}/100`);
+      console.log(`語彙: ${result.scores.vocabulary}/25`);
+      console.log(`構造: ${result.scores.structure}/25`);
+      console.log(`修辞: ${result.scores.rhetoric}/25`);
+      console.log(`感情: ${result.scores.emotion}/25`);
       
       console.log('\n【特徴的な要素】');
-      console.log(`チバで始まる: ${report.specificFindings.chibaOpening ? '✅' : '❌'}`);
-      console.log(`段落数: ${report.specificFindings.paragraphCount}`);
-      console.log(`自問自答: ${report.specificFindings.selfDialogueCount}回`);
-      console.log(`読者心理先読み: ${report.specificFindings.anticipationCount}回`);
-      console.log(`特徴的な語彙: ${report.specificFindings.characteristicWords.join(', ')}`);
+      const chibaOpening = testText.text.startsWith('チバです');
+      const paragraphCount = testText.text.split(/\n\n+/).filter(p => p.trim()).length;
+      const selfDialogueCount = (testText.text.match(/なぜか？|どうなるか？|ということは？/g) || []).length;
+      const anticipationCount = (testText.text.match(/と思うかもしれません|と感じるかもしれません/g) || []).length;
+      const characteristicWords = ['ガンガン', 'ゴリゴリ', 'どんどん', '結論'].filter(word => testText.text.includes(word));
+      
+      console.log(`チバで始まる: ${chibaOpening ? '✅' : '❌'}`);
+      console.log(`段落数: ${paragraphCount}`);
+      console.log(`自問自答: ${selfDialogueCount}回`);
+      console.log(`読者心理先読み: ${anticipationCount}回`);
+      console.log(`特徴的な語彙: ${characteristicWords.join(', ')}`);
       
       console.log('\n【フィードバック】');
       result.feedback.forEach(fb => console.log(`- ${fb}`));
@@ -204,7 +210,7 @@ class CSDSTestSuite {
       ['強いスタイル', strongStyle]
     ]) {
       const result = await this.validator.validate(text);
-      console.log(`${name}: ${result.overallScore}/100`);
+      console.log(`${name}: ${result.totalScore}/100 (${result.grade})`);
     }
   }
 
@@ -259,7 +265,7 @@ class CSDSTestSuite {
     // 検証
     const validationResult = await this.validator.validate(styledResponse);
     console.log('\n【品質チェック】');
-    console.log(`スコア: ${validationResult.overallScore}/100`);
+    console.log(`スコア: ${validationResult.totalScore}/100 (${validationResult.grade})`);
     console.log(`判定: ${validationResult.isAuthentic ? '✅ チバらしい' : '❌ 改善が必要'}`);
   }
 
