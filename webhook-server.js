@@ -162,12 +162,50 @@ app.post('/webhook', middleware(config), async (req, res) => {
         
         console.log('Total CSV data rows:', csvData.length);
         
-        // 多段階検索の実行
-        const multiStageResults = performMultiStageSearch(userMessage, queryAnalysis, csvData);
-        console.log('Multi-stage search results:', multiStageResults.length);
+        // Supabase検索を優先的に実行
+        let supabaseResults = null;
+        if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+          supabaseResults = await searchSupabase(userMessage, queryAnalysis);
+        }
         
-        // 各結果に詳細スコアを計算
-        const searchResults = multiStageResults.map(result => {
+        let searchResults = [];
+        
+        if (supabaseResults && supabaseResults.length > 0) {
+          // Supabase検索が成功した場合
+          console.log('Using Supabase search results');
+          searchResults = supabaseResults;
+          
+          // 結果が少ない場合はCSV検索で補完
+          if (supabaseResults.length < 3) {
+            console.log('Supplementing with CSV search');
+            const multiStageResults = performMultiStageSearch(userMessage, queryAnalysis, csvData);
+            
+            // 重複を避けながら結果を統合
+            const existingIds = new Set(supabaseResults.map(r => r.id));
+            const additionalResults = multiStageResults
+              .filter(r => !existingIds.has(r.id))
+              .map(result => {
+                const detailedScore = calculateRelevanceScore(
+                  userMessage,
+                  queryAnalysis,
+                  result
+                );
+                return {
+                  ...result,
+                  score: Math.round((result.baseScore * 0.3 + detailedScore * 0.7))
+                };
+              });
+            
+            searchResults = [...supabaseResults, ...additionalResults];
+          }
+        } else {
+          // Supabase検索が失敗またはデータがない場合は従来のCSV検索
+          console.log('Falling back to CSV search');
+          const multiStageResults = performMultiStageSearch(userMessage, queryAnalysis, csvData);
+          console.log('Multi-stage search results:', multiStageResults.length);
+          
+          // 各結果に詳細スコアを計算
+          searchResults = multiStageResults.map(result => {
           const detailedScore = calculateRelevanceScore(
             userMessage,
             queryAnalysis,
@@ -188,6 +226,7 @@ app.post('/webhook', middleware(config), async (req, res) => {
             matchType: result.matchType
           };
         });
+        }
         
         console.log('Search results with scores:', searchResults.map(r => 
           `${r.title} (${r.matchType}: ${r.score})`
