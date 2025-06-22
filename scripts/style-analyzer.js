@@ -76,19 +76,26 @@ class ChibaStyleAnalyzer {
 
   // テキストから段落構造を分析
   analyzeParagraphStructure(text) {
-    const paragraphs = text.split(/\n{2,}/);
+    // CSVでは改行情報が失われているため、文の区切りでチバさんらしい短い段落を推定
+    // チバさんの特徴: 1-3文で改行、短い段落構成
+    const sentences = text.split(/[。！？]/).filter(s => s.trim());
     const patterns = [];
-
-    paragraphs.forEach(para => {
-      const sentences = para.split(/[。！？]/);
-      patterns.push({
-        length: para.length,
-        sentenceCount: sentences.filter(s => s.trim()).length,
-        startsWithTransition: this.startsWithTransition(para),
-        endsWithRhetorical: this.endsWithRhetoricalQuestion(para),
-        hasLineBreaks: (para.match(/\n/g) || []).length
-      });
-    });
+    
+    // 3文ずつグループ化して擬似的な段落を作成
+    for (let i = 0; i < sentences.length; i += 2) {
+      const paragraphSentences = sentences.slice(i, Math.min(i + 3, sentences.length));
+      const para = paragraphSentences.join('。') + '。';
+      
+      if (para.length > 10) { // 極端に短い段落を除外
+        patterns.push({
+          length: para.length,
+          sentenceCount: paragraphSentences.length,
+          startsWithTransition: this.startsWithTransition(para),
+          endsWithRhetorical: this.endsWithRhetoricalQuestion(para),
+          hasLineBreaks: 0 // CSVでは改行情報なし
+        });
+      }
+    }
 
     return patterns;
   }
@@ -162,17 +169,27 @@ class ChibaStyleAnalyzer {
   // 自問自答パターンを検出
   detectSelfDialogue(text) {
     const patterns = [];
-    const questionMarkers = ['なぜか？', 'どうなるか？', 'ということは？', 'それは何か？'];
+    const questionMarkers = [
+      'なぜか？', 'なぜか?', 'なぜなら',
+      'どうなるか？', 'どうなるか?',
+      'ということは？', 'ということは?',
+      'それは何か？', 'それは何か?',
+      'どういうことか？', 'どういうことか?'
+    ];
     
     questionMarkers.forEach(marker => {
-      const regex = new RegExp(`${marker}[^。]*。`, 'g');
-      const matches = text.match(regex);
-      if (matches) {
-        patterns.push(...matches);
+      const index = text.indexOf(marker);
+      if (index !== -1) {
+        // マーカーを含む文脈を抽出
+        const start = Math.max(0, text.lastIndexOf('。', index - 1) + 1);
+        const end = text.indexOf('。', index);
+        if (end !== -1) {
+          patterns.push(text.substring(start, end + 1).trim());
+        }
       }
     });
     
-    return patterns;
+    return [...new Set(patterns)]; // 重複を除去
   }
 
   // 読者心理の先読みパターンを検出
@@ -277,7 +294,14 @@ class ChibaStyleAnalyzer {
   calculateStatistics() {
     // 段落の平均長と分布
     const paragraphLengths = this.styleDNA.structure.paragraphPatterns.map(p => p.length);
-    const avgParagraphLength = paragraphLengths.reduce((a, b) => a + b, 0) / paragraphLengths.length;
+    const avgParagraphLength = paragraphLengths.length > 0
+      ? paragraphLengths.reduce((a, b) => a + b, 0) / paragraphLengths.length
+      : 0;
+    
+    // 文の数の平均
+    const avgSentenceCount = this.styleDNA.structure.paragraphPatterns.length > 0
+      ? this.styleDNA.structure.paragraphPatterns.reduce((sum, p) => sum + p.sentenceCount, 0) / this.styleDNA.structure.paragraphPatterns.length
+      : 0;
     
     // 最頻出の助詞パターン上位10
     const topParticleBigrams = Object.entries(this.styleDNA.particlePatterns.bigrams)
@@ -291,6 +315,7 @@ class ChibaStyleAnalyzer {
     
     this.styleDNA.statistics = {
       avgParagraphLength: Math.round(avgParagraphLength),
+      avgSentenceCount: Math.round(avgSentenceCount * 10) / 10,
       topParticleBigrams,
       topEndings,
       totalSelfDialogue: this.styleDNA.rhetoric.selfDialogue.length,
@@ -330,6 +355,7 @@ class ChibaStyleAnalyzer {
     
     console.log('\n【段落構造】');
     console.log(`平均段落長: ${this.styleDNA.statistics.avgParagraphLength}文字`);
+    console.log(`平均文数/段落: ${this.styleDNA.statistics.avgSentenceCount}文`);
     
     console.log('\n【修辞技法】');
     console.log(`自問自答パターン: ${this.styleDNA.statistics.totalSelfDialogue}個`);
