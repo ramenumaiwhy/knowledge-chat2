@@ -19,7 +19,8 @@
       "Bash(docker exec:*)",
       "Bash(curl:*)",
       "Bash(open http://localhost:5678)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(./test-n8n-webhook.sh:*)"
     ],
     "deny": []
   },

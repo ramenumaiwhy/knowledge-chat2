@@ -6,7 +6,7 @@ echo "🧪 n8n CSDS Webhook テスト開始"
 echo "================================"
 
 # エンドポイント設定
-WEBHOOK_URL="http://localhost:5678/webhook-test/line-webhook-csds"
+WEBHOOK_URL="http://localhost:5678/webhook/line-csds-code"
 
 # テストケース配列
 declare -a test_messages=(
