@@ -1,0 +1,138 @@
+{
+  "name": "LINE Chatbot with CSDS (Code Node)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "line-csds-code",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "LINE Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "line-csds-code"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "a8c3f3a3-e5e5-4e9e-8b4a-6f9d8e3c2a1b",
+              "leftValue": "={{ $json.body.events[0].type }}",
+              "rightValue": "message",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Check Message Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// CSDSスタイル注入（簡易版）\nconst userMessage = $input.first().json.body.events[0].message.text;\nconst replyToken = $input.first().json.body.events[0].replyToken;\n\n// チバスタイルの特徴的な要素\nconst chibaVocabulary = {\n  emphasis: ['ガンガン', 'ゴリゴリ', 'バンバン', 'ドンドン'],\n  conclusion: ['結論。', '結論から言うと。', '結論、'],\n  selfQuestion: ['なぜか？', 'どうしてか？', 'その理由は？'],\n  anticipation: ['と思うかもしれません', 'と感じるかもしれません', 'と考えるかもしれません']\n};\n\n// 基本応答を生成\nlet response = `チバです。\\n\\n${userMessage}についてですね。\\n\\n`;\n\n// 自問自答を追加\nresponse += `なぜか？\\n\\n`;\nresponse += `多くの人が同じように悩むからです。\\n\\n`;\n\n// 読者の心理を先読み\nresponse += `「難しそう」と思うかもしれません。\\n\\n`;\nresponse += `でも大丈夫。\\n\\n`;\n\n// 結論\nresponse += `結論。\\n`;\nconst randomEmphasis = chibaVocabulary.emphasis[Math.floor(Math.random() * chibaVocabulary.emphasis.length)];\nresponse += `${randomEmphasis}挑戦あるのみです。`;\n\n// スコア計算（簡易版）\nlet score = 0;\nif (response.includes('チバです')) score += 25;\nif (response.includes('なぜか？')) score += 25;\nif (response.includes('かもしれません')) score += 25;\nif (chibaVocabulary.emphasis.some(word => response.includes(word))) score += 25;\n\nreturn {\n  replyToken,\n  responseText: response,\n  score,\n  userMessage\n};"
+      },
+      "name": "Apply CSDS Style",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINE_CHANNEL_ACCESS_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"replyToken\": \"{{ $json.replyToken }}\",\n  \"messages\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"{{ $json.responseText }}\\n\\n[スコア: {{ $json.score }}/100]\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "name": "Reply to LINE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [850, 280]
+    },
+    {
+      "parameters": {
+        "content": "## エラーレスポンス\nメッセージタイプが不正です",
+        "respondWith": "text",
+        "responseBody": "={\n  \"error\": \"Invalid message type\"\n}"
+      },
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [650, 400]
+    }
+  ],
+  "connections": {
+    "LINE Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Message Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Message Type": {
+      "main": [
+        [
+          {
+            "node": "Apply CSDS Style",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply CSDS Style": {
+      "main": [
+        [
+          {
+            "node": "Reply to LINE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
