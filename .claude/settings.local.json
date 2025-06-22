@@ -17,7 +17,9 @@
       "Bash(docker-compose:*)",
       "Bash(docker logs:*)",
       "Bash(docker exec:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(open http://localhost:5678)",
+      "Bash(chmod:*)"
     ],
     "deny": []
   },
