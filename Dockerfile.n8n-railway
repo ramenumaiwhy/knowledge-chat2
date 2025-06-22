@@ -1,0 +1,35 @@
+FROM n8nio/n8n:latest
+
+USER root
+
+# 必要なツールをインストール
+RUN apk add --no-cache curl
+
+# Create necessary directories
+RUN mkdir -p /home/node/.n8n/nodes/custom
+
+# Copy custom node
+COPY --chown=node:node n8n-nodes/ChibaStyleNode.js /home/node/.n8n/nodes/custom/
+
+# Copy libraries
+COPY --chown=node:node lib /home/node/lib
+COPY --chown=node:node data/chiba-style-dna.json /home/node/data/
+
+# Set environment
+ENV N8N_CUSTOM_EXTENSIONS="/home/node/.n8n/nodes/custom"
+ENV NODE_PATH="/home/node/node_modules:/usr/local/lib/node_modules"
+ENV N8N_BASIC_AUTH_ACTIVE=true
+ENV N8N_DIAGNOSTICS_ENABLED=false
+ENV N8N_PORT=5678
+ENV N8N_HOST=0.0.0.0
+
+USER node
+
+EXPOSE 5678
+
+# n8nは標準で/healthzエンドポイントを提供
+HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=5 \
+  CMD curl -f http://localhost:5678/healthz || exit 1
+
+# デフォルトコマンド
+CMD ["n8n", "start"]
