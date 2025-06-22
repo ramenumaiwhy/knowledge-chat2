@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  n8n:
+    build:
+      context: .
+      dockerfile: Dockerfile.n8n
+    container_name: n8n-csds
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=password
+      - N8N_ENCRYPTION_KEY=n8n-encryption-key-test-32chars!
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://n8n:5678/
+      - N8N_CUSTOM_EXTENSIONS=/home/node/.n8n/custom
+      - NODE_ENV=development
+      # API Keys
+      - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
+      - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - GITHUB_OWNER=${GITHUB_OWNER}
+      - GITHUB_REPO=${GITHUB_REPO}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-nodes:/home/node/.n8n/custom
+      - ./lib:/home/node/lib
+      - ./data:/home/node/data
+    networks:
+      - csds-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  webhook-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: webhook-server-csds
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
+      - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - NODE_ENV=development
+    volumes:
+      - ./data:/app/data
+      - ./lib:/app/lib
+    networks:
+      - csds-network
+    depends_on:
+      - n8n
+
+  # オプション: Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: redis-csds
+    ports:
+      - "6379:6379"
+    networks:
+      - csds-network
+    volumes:
+      - redis_data:/data
+
+networks:
+  csds-network:
+    driver: bridge
+
+volumes:
+  n8n_data:
+  redis_data:
