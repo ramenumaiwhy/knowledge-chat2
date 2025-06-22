@@ -56,8 +56,12 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
-// LINE署名検証ミドルウェア
-app.post('/webhook', middleware(config), async (req, res) => {
+// LINE署名検証ミドルウェア（開発環境では署名検証をスキップ）
+const middlewareConfig = process.env.NODE_ENV === 'development' 
+  ? express.json() 
+  : middleware(config);
+
+app.post('/webhook', middlewareConfig, async (req, res) => {
   try {
     console.log('Webhook received');
     const events = req.body.events;
