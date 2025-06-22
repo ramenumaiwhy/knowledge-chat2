@@ -1,9 +1,18 @@
 const express = require('express');
 const { Client, middleware } = require('@line/bot-sdk');
 const axios = require('axios');
+const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Supabaseクライアントの初期化
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+console.log('Supabase client initialized');
 
 // ナンパ関連の類義語辞書
 const SYNONYMS = {
