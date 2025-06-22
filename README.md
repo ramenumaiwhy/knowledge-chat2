@@ -183,7 +183,7 @@ npm run test-webhook  # ローカルwebhookテスト
 
 ```
 knowledge-chat2/
-├── webhook-server.js      # メインサーバー
+├── webhook-server.js      # メインサーバー（本番稼働中）
 ├── data/
 │   ├── knowledge.csv     # Q&Aデータ
 │   ├── processed_knowledge.csv  # 詳細データ
@@ -196,9 +196,15 @@ knowledge-chat2/
 │   └── style-analyzer.js # スタイル分析ツール
 ├── test/
 │   └── test-csds.js     # CSDSテストスイート
+├── n8n関連（参考保存）
+│   ├── n8n-workflow-full.json    # n8nワークフロー定義
+│   ├── n8n-nodes/
+│   │   └── ChibaStyleNode.js     # カスタムノード
+│   └── Dockerfile.n8n-*          # 各種Dockerファイル
 ├── docs/                 # ドキュメント
 ├── README-CSDS.md       # CSDS設計ドキュメント
-├── Dockerfile           # Railway用
+├── Dockerfile           # Railway用（webhook-server）
+├── railway.json         # Railway設定
 └── package.json
 ```
 
@@ -265,6 +271,22 @@ curl http://localhost:3000/health
 - n8nワークフロー統合の試行（webhook-serverを最終選択）
 - Railway環境変数の整理
 - ヘルスチェックエンドポイントの追加
+
+### n8n統合の試行と判断
+#### 実装した内容:
+- 完全なn8nワークフロー（`n8n-workflow-full.json`）の作成
+  - クエリ分析、CSV検索、Gemini統合、CSDS適用を含む高度なフロー
+- カスタムノード（`ChibaStyleNode.js`）の開発
+- Docker環境の構築（複数のDockerfile作成）
+- MCP経由でのワークフロー自動インポート機能
+
+#### 採用しなかった理由:
+1. **権限エラー**: コンテナ起動時の権限問題が頻発
+2. **デプロイの複雑性**: ヘルスチェック失敗などの運用上の課題
+3. **リソース効率**: webhook-server.jsの方が軽量で高速
+4. **保守性**: シンプルなNode.jsアプリケーションの方が管理しやすい
+
+結果として、同等の機能をwebhook-server.jsで実現でき、より安定した運用が可能となったため、n8nは不採用としました。関連ファイルは将来の参考のために保持しています。
 
 ## 📈 将来の拡張
 
