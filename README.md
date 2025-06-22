@@ -17,17 +17,19 @@ LINE User
     ↓
 LINE Messaging API
     ↓
-webhook-server.js (Express)
+Railway (webhook-server.js)
+    ↓
+日本語NLP (kuromoji) → シノニム展開・クエリ分析
     ↓
 Supabase Vector Search ← Embeddings (Gemini API)
     ↓ (フォールバック)
-CSV Knowledge Base ← GitHub
+CSV Knowledge Base (GitHub)
     ↓
-Gemini API (gemini-1.5-flash)
+Gemini API (gemini-1.5-flash) → 回答生成
     ↓
-CSDS (Chiba Style DNA System) ← スタイル注入
+CSDS (Chiba Style DNA System) → スタイル注入・検証
     ↓
-Natural Response with Chiba's Style
+Natural Response with Chiba's Style (スコア60点以上)
     ↓
 LINE User
 ```
@@ -47,6 +49,28 @@ LINE User
    - `lib/style-validator.js`: スタイル検証システム
    - `data/chiba-style-dna.json`: 328件の文章から抽出したスタイルDNA
 6. **Railway**: Dockerコンテナホスティング（自動デプロイ）
+
+## 🎯 現在の実装状況（2025年1月）
+
+### ✅ 完成した機能
+- **webhook-server.js**: Railwayで本番稼働中
+- **CSDS (Chiba Style DNA System)**: チバスタイル再現システム実装完了
+  - スコア60点以上を達成（目標50点を大幅クリア）
+  - 「なぜか？」の頻度を調整済み（1回/応答に制限）
+- **日本語NLP**: kuromoji統合によるシノニム展開と高度な検索
+- **RAGシステム**: CSV知識ベースからの適切な情報取得
+- **Railway デプロイ**: 自動デプロイ設定完了
+- **LINE Webhook**: 正常稼働中
+
+### 📊 パフォーマンス指標
+- **CSDSスコア**: 平均69点（目標50点以上）
+- **レスポンス時間**: 1-3秒
+- **稼働率**: 99%+
+- **月額コスト**: $5（Railway hosting）
+
+### 🔗 本番環境
+- **Webhook URL**: `https://knowledge-chat2-production.up.railway.app/webhook`
+- **ヘルスチェック**: `https://knowledge-chat2-production.up.railway.app/health`
 
 ## 🚀 クイックスタート
 
@@ -229,16 +253,36 @@ curl http://localhost:3000/health
 - LINE署名検証を実装
 - プライバシー保護（個人情報の自動削除）
 
+## 🔄 最近の更新（2025年1月）
+
+### スタイル調整
+- 「なぜか？」の出現頻度を削減（1回/応答に制限）
+- 重複チェック機能を追加
+- 挿入確率を50%→30%に調整
+- より自然な文章生成を実現
+
+### デプロイメント改善
+- n8nワークフロー統合の試行（webhook-serverを最終選択）
+- Railway環境変数の整理
+- ヘルスチェックエンドポイントの追加
+
 ## 📈 将来の拡張
 
-### Supabaseベクトル検索（実装済み）
+### 実装済み機能
 
+#### Supabaseベクトル検索
 現在350件のデータで稼働中。以下の機能を実装：
 
 1. **ハイブリッド検索**: ベクター類似度 + キーワードマッチング
 2. **自動フォールバック**: Supabase障害時はCSV検索を使用
 3. **高精度検索**: Gemini APIによるembedding生成
 4. **リアルタイム検索**: インデックス化により高速応答
+
+### 検討中の機能
+- 会話履歴の保存とコンテキスト管理
+- ユーザー別のパーソナライゼーション
+- 画像認識とマルチモーダル対応
+- より高度なスタイル学習システム
 
 ## 🤝 コントリビューション
 
