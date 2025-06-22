@@ -2,10 +2,14 @@ const express = require('express');
 const { Client, middleware } = require('@line/bot-sdk');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
+const ChibaStyleInjector = require('./lib/style-injector');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// スタイル注入システムの初期化
+const styleInjector = new ChibaStyleInjector();
 
 // Supabaseクライアントの条件付き初期化
 let supabase = null;
@@ -259,46 +263,31 @@ app.post('/webhook', middlewareConfig, async (req, res) => {
               {
                 contents: [{
                   parts: [{
-                    text: `あなたはナンパ師「チバ」です。ユーザーからの質問に対して、丁寧な敬語で親しみやすく回答してください。
-
-【絶対に守るべき制約】
-1. 必ず敬語（です・ます調）で統一する
-2. 提供された情報は「参考」として、新規の回答を生成する
-3. 特定の読者名（タケダさん等）は絶対に使わない
-4. 「メルマガで配った」などのメタ的な内容は言わない
-5. 「データによると」という表現は使わない
-6. 文頭は必ず「チバです。」から始める
-7. 句読点ごとに改行、段落間は空行2行
-8. 記号（[]！など）は使わない
-
-【回答の構成】
-1. まず質問への共感を示す
-2. 私の経験談として自然に語る（「実は私も〜」「以前〜したことがあります」）
-3. 具体的なアドバイスを提供
-4. 最後に励ましのメッセージ
-
-【口調の例】
-良い例：「そうですね」「〜ですよね」「〜と思います」「〜かもしれません」
-悪い例：「だね」「〜よ」「〜だ」「〜かな」
-
-質問タイプ: ${queryAnalysis.type}
-ユーザーの質問: ${userMessage}
-
-参考情報（この中から適切な内容を選んで、一般化して使用）:
-${selectedResults.map((r, idx) => `
+                    text: styleInjector.generateStyledPrompt(
+                      userMessage,
+                      queryAnalysis,
+                      selectedResults.map((r, idx) => `
 情報${idx + 1}（関連度: ${r.score}/100）
 ${r.title}
 ${r.summary}
-${r.content}`).join('\n\n')}
-
-上記の参考情報から、ユーザーの質問に関連する内容を抽出し、特定の個人名や具体的すぎる状況は一般化して、新しい回答として生成してください。`
+${r.content}`).join('\n\n')
+                    )
                   }]
                 }]
               }
             );
             
-            replyText = geminiResponse.data.candidates[0].content.parts[0].text;
+            const rawResponse = geminiResponse.data.candidates[0].content.parts[0].text;
             console.log('Gemini response received');
+            
+            // スタイル注入を適用
+            try {
+              replyText = await styleInjector.injectStyle(rawResponse, queryAnalysis);
+              console.log('Style injection applied');
+            } catch (styleError) {
+              console.error('Style injection error:', styleError.message);
+              replyText = rawResponse; // フォールバック
+            }
           } catch (geminiError) {
             console.error('Gemini API error:', geminiError.response?.data || geminiError.message);
             
@@ -763,7 +752,19 @@ function performMultiStageSearch(query, queryAnalysis, csvData) {
   return Array.from(results.values());
 }
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log('Webhook URL: /webhook');
-});
+// サーバー起動時にスタイル注入システムを初期化
+async function startServer() {
+  try {
+    await styleInjector.initialize();
+    console.log('Style injection system initialized');
+  } catch (error) {
+    console.error('Failed to initialize style injector:', error.message);
+  }
+  
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log('Webhook URL: /webhook');
+  });
+}
+
+startServer();
