@@ -7,12 +7,17 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Supabaseクライアントの初期化
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
-console.log('Supabase client initialized');
+// Supabaseクライアントの条件付き初期化
+let supabase = null;
+if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+  supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY
+  );
+  console.log('Supabase client initialized');
+} else {
+  console.log('Supabase not configured, using CSV search only');
+}
 
 // ナンパ関連の類義語辞書
 const SYNONYMS = {
@@ -166,9 +171,9 @@ app.post('/webhook', middlewareConfig, async (req, res) => {
         
         console.log('Total CSV data rows:', csvData.length);
         
-        // Supabase検索を優先的に実行
+        // Supabase検索を優先的に実行（設定されている場合）
         let supabaseResults = null;
-        if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+        if (supabase) {
           supabaseResults = await searchSupabase(userMessage, queryAnalysis);
         }
         
@@ -657,6 +662,12 @@ async function generateEmbedding(text) {
 
 // Supabaseハイブリッド検索
 async function searchSupabase(query, queryAnalysis) {
+  // Supabaseが設定されていない場合はnullを返す
+  if (!supabase) {
+    console.log('⚠️ Supabase未設定のためスキップ');
+    return null;
+  }
+  
   console.log(`🔍 Supabase検索開始: "${query}"`);
   
   let queryEmbedding = null;
