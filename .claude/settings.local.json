@@ -11,7 +11,13 @@
       "Bash(docker run:*)",
       "Bash(grep:*)",
       "Bash(cat:*)",
-      "Bash(docker build:*)"
+      "Bash(docker build:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(ls:*)",
+      "Bash(docker-compose:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker exec:*)",
+      "Bash(curl:*)"
     ],
     "deny": []
   },

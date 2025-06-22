@@ -10,7 +10,7 @@ README.md
 temp
 docs
 scripts
-n8n-*
+# n8n-*
 .vscode
 .idea
 *.swp

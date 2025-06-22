@@ -1,10 +1,9 @@
-version: '3.8'
 
 services:
   n8n:
     build:
       context: .
-      dockerfile: Dockerfile.n8n
+      dockerfile: Dockerfile.n8n-simple
     container_name: n8n-csds
     ports:
       - "5678:5678"
