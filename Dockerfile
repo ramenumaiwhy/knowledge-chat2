@@ -11,6 +11,7 @@ RUN npm ci --only=production
 # Copy only necessary files
 COPY webhook-server.js ./
 COPY data ./data/
+COPY lib ./lib/
 
 # Expose port
 EXPOSE ${PORT:-3000}
