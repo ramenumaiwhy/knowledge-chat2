@@ -590,6 +590,73 @@ function generateNgrams(text, n = 2) {
   return ngrams;
 }
 
+// Gemini APIでembedding生成
+async function generateEmbedding(text) {
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${geminiApiKey}`;
+  
+  try {
+    const response = await axios.post(url, {
+      model: 'models/text-embedding-004',
+      content: { parts: [{ text: text }] }
+    });
+    
+    if (response.status !== 200) {
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+    
+    return response.data.embedding.values;
+  } catch (error) {
+    console.error('Embedding生成エラー:', error.message);
+    return null;
+  }
+}
+
+// Supabaseハイブリッド検索
+async function searchSupabase(query, queryAnalysis) {
+  console.log(`🔍 Supabase検索開始: "${query}"`);
+  
+  let queryEmbedding = null;
+  
+  // Embedding生成を試みる
+  console.log('📊 Embedding生成中...');
+  queryEmbedding = await generateEmbedding(query);
+  
+  if (!queryEmbedding) {
+    console.log('⚠️ Embedding生成失敗、キーワード検索のみ実行');
+  }
+  
+  try {
+    const { data, error } = await supabase.rpc('hybrid_search_chiba', {
+      query_text: query,
+      query_embedding: queryEmbedding,
+      match_threshold: 0.5,
+      match_count: 5
+    });
+    
+    if (error) {
+      throw error;
+    }
+    
+    console.log(`✅ Supabase検索結果: ${data.length}件`);
+    
+    // 検索結果を整形
+    return data.map(result => ({
+      id: result.id,
+      title: result.title,
+      content: result.content,
+      summary: result.summary,
+      category: result.category,
+      keywords: result.keywords || '',
+      score: Math.round((result.score || 0) * 100),
+      matchType: 'supabase'
+    }));
+  } catch (error) {
+    console.error('❌ Supabase検索エラー:', error.message);
+    return null;
+  }
+}
+
 // 多段階検索関数
 function performMultiStageSearch(query, queryAnalysis, csvData) {
   const results = new Map(); // ID -> データのマップ
