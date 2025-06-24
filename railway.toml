@@ -1,0 +1,69 @@
+# Railway Configuration for n8n Advanced Workflow
+# Supabase Vector Search + Style DNA Integration
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "./Dockerfile"
+
+[deploy]
+healthcheckPath = "/healthz"
+healthcheckTimeout = 300
+restartPolicyType = "always"
+
+[[services]]
+name = "n8n-advanced"
+type = "web"
+
+[services.n8n-advanced]
+port = 5678
+host = "0.0.0.0"
+
+[env]
+# n8n基本設定
+N8N_HOST = "0.0.0.0"
+N8N_PORT = "5678"
+N8N_PROTOCOL = "https"
+WEBHOOK_URL = "https://${{RAILWAY_STATIC_URL}}"
+N8N_EDITOR_BASE_URL = "https://${{RAILWAY_STATIC_URL}}"
+VUE_APP_URL_BASE_API = "https://${{RAILWAY_STATIC_URL}}"
+
+# n8nセキュリティ
+N8N_BASIC_AUTH_ACTIVE = "true"
+N8N_BASIC_AUTH_USER = "${{N8N_BASIC_AUTH_USER}}"
+N8N_BASIC_AUTH_PASSWORD = "${{N8N_BASIC_AUTH_PASSWORD}}"
+N8N_ENCRYPTION_KEY = "${{N8N_ENCRYPTION_KEY}}"
+
+# n8n設定
+EXECUTIONS_PROCESS = "main"
+N8N_PERSONALIZATION_ENABLED = "false"
+N8N_VERSION_NOTIFICATIONS_ENABLED = "false"
+N8N_DIAGNOSTICS_ENABLED = "false"
+N8N_HIRING_BANNER_ENABLED = "false"
+N8N_USER_FOLDER = "/data"
+N8N_LOG_LEVEL = "info"
+
+# メモリ設定（大規模ワークフロー対応）
+NODE_OPTIONS = "--max-old-space-size=2048"
+
+# タイムゾーン
+TZ = "Asia/Tokyo"
+
+# 外部サービス連携
+LINE_CHANNEL_ACCESS_TOKEN = "${{LINE_CHANNEL_ACCESS_TOKEN}}"
+LINE_CHANNEL_SECRET = "${{LINE_CHANNEL_SECRET}}"
+GEMINI_API_KEY = "${{GEMINI_API_KEY}}"
+GITHUB_TOKEN = "${{GITHUB_TOKEN}}"
+GITHUB_OWNER = "${{GITHUB_OWNER}}"
+GITHUB_REPO = "${{GITHUB_REPO}}"
+SUPABASE_URL = "${{SUPABASE_URL}}"
+SUPABASE_SERVICE_KEY = "${{SUPABASE_SERVICE_KEY}}"
+
+# n8n実行設定
+EXECUTIONS_TIMEOUT = "300"
+EXECUTIONS_TIMEOUT_MAX = "600"
+N8N_PAYLOAD_SIZE_MAX = "16"
+N8N_METRICS = "true"
+
+# Webhook設定
+WEBHOOK_TUNNEL_URL = "https://${{RAILWAY_STATIC_URL}}"
+N8N_DISABLE_PRODUCTION_MAIN_PROCESS = "false"

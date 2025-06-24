@@ -26,7 +26,16 @@
       "Bash(railway open:*)",
       "Bash(railway environment:*)",
       "Bash(railway variables:*)",
-      "Bash(railway up:*)"
+      "Bash(railway up:*)",
+      "Bash(mkdir:*)",
+      "Bash(# Generate secure passwords and keys\necho \"# Auto-generated secure values\" >> .env.n8n\necho \"N8N_ENCRYPTION_KEY=$(openssl rand -hex 32)\" >> .env.n8n\necho \"N8N_BASIC_AUTH_PASSWORD=$(openssl rand -base64 32 | tr -d '=')\" >> .env.n8n\necho \"POSTGRES_PASSWORD=$(openssl rand -base64 32 | tr -d '=')\" >> .env.n8n\necho \"GRAFANA_PASSWORD=$(openssl rand -base64 32 | tr -d '=')\" >> .env.n8n)",
+      "Bash(docker restart:*)",
+      "Bash(source:*)",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_file_upload",
+      "mcp__playwright__browser_press_key",
+      "mcp__playwright__browser_close",
+      "Bash(echo:*)"
     ],
     "deny": []
   },

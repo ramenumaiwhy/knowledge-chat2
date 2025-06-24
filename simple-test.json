@@ -1,0 +1,10 @@
+{
+  "events": [{
+    "type": "message",
+    "message": {
+      "type": "text",
+      "text": "ナンパのコツを教えて"
+    },
+    "replyToken": "test-reply-token-123"
+  }]
+}

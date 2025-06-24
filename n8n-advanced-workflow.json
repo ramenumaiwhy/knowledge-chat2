@@ -1,0 +1,386 @@
+{
+  "name": "Chiba LINE Bot with Vector Search & Style DNA",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "line-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "LINE Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 400],
+      "id": "webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// LINEイベントデータを解析\nconst body = $input.first().json.body;\nconst events = body.events || [];\n\nif (events.length === 0) {\n  return [{ json: { error: 'No events' } }];\n}\n\nconst event = events[0];\nconst messageType = event.type;\nconst replyToken = event.replyToken;\n\n// メッセージイベントのみ処理\nif (messageType !== 'message' || !event.message || event.message.type !== 'text') {\n  return [{ json: { error: 'Not a text message' } }];\n}\n\nconst userMessage = event.message.text.trim();\nconst userId = event.source.userId;\n\n// クエリ解析\nconst isGreeting = /^(こんにちは|こんばんは|おはよう|はじめまして|ハロー|やあ|どうも|hi|hello)/i.test(userMessage);\nconst queryType = isGreeting ? 'greeting' : \n                 userMessage.includes('？') || userMessage.includes('?') ? 'question' : \n                 'consultation';\n\nreturn [{\n  json: {\n    userMessage,\n    replyToken,\n    userId,\n    queryType,\n    isGreeting,\n    processTimestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Parse LINE Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [400, 400],
+      "id": "parse"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isGreeting }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Is Greeting?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [600, 400],
+      "id": "switch_greeting"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 挨拶に対する固定レスポンス\nconst greetings = [\n  'チバです。\\n\\nこんにちは。今日はどんなご相談でしょうか？',\n  'チバです。\\n\\nお元気そうで何よりです。何かお手伝いできることがあれば、遠慮なくお聞きください。',\n  'チバです。\\n\\nはじめまして。恋愛に関することなら何でもお答えしますよ。'\n];\n\nconst response = greetings[Math.floor(Math.random() * greetings.length)];\n\nreturn [{\n  json: {\n    ...($input.first().json),\n    generatedResponse: response,\n    responseType: 'greeting',\n    skipVectorSearch: true\n  }\n}];"
+      },
+      "name": "Handle Greeting",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [800, 300],
+      "id": "greeting_handler"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $env.GEMINI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"models/text-embedding-004\",\n  \"content\": {\n    \"parts\": [{\n      \"text\": \"{{ $json.userMessage }}\"\n    }]\n  }\n}",
+        "options": {}
+      },
+      "name": "Generate Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [800, 500],
+      "id": "embedding",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT * FROM hybrid_search_chiba(\n  query_text := '{{ $node[\"parse\"].json.userMessage }}',\n  query_embedding := '{{ $json.embedding.values }}',\n  match_threshold := 0.5,\n  match_count := 5\n);",
+        "options": {}
+      },
+      "name": "Supabase Vector Search",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1000, 500],
+      "id": "supabase_search",
+      "continueOnFail": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase_creds",
+          "name": "Supabase Chiba"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "Has Results?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [1200, 500],
+      "id": "switch_results"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "file",
+        "operation": "get",
+        "owner": "={{ $env.GITHUB_OWNER }}",
+        "repository": "={{ $env.GITHUB_REPO }}",
+        "filePath": "data/knowledge.csv"
+      },
+      "name": "Fallback: Get CSV",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [1400, 600],
+      "id": "github_csv",
+      "credentials": {
+        "githubOAuth2Api": {
+          "id": "github_creds",
+          "name": "GitHub"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// CSVフォールバック検索\nconst userMessage = $node[\"parse\"].json.userMessage.toLowerCase();\nconst csvContent = $json.content;\nconst csvData = Buffer.from(csvContent, 'base64').toString('utf-8');\n\n// CSVをパース\nconst rows = csvData.split('\\n').map(row => {\n  const matches = row.match(/(?:^|,)(\"(?:[^\"]+|\"\")*\"|[^,]*)/g);\n  return matches ? matches.map(match => match.replace(/^,/, '').replace(/^\"|\"$/g, '')) : [];\n});\n\nconst data = rows.slice(1).filter(row => row.length > 0);\n\n// シンプルなキーワード検索\nconst searchResults = [];\nfor (const row of data) {\n  const title = row[1] || '';\n  const content = row[2] || '';\n  const keywords = row[6] || '';\n  \n  if (title.toLowerCase().includes(userMessage) || \n      content.toLowerCase().includes(userMessage) ||\n      keywords.toLowerCase().includes(userMessage)) {\n    searchResults.push({\n      title: title,\n      content: content,\n      summary: row[3] || content.substring(0, 200),\n      category: row[4] || 'general',\n      score: 0.7\n    });\n  }\n}\n\n// 上位5件を返す\nreturn [{\n  json: searchResults.slice(0, 5)\n}];"
+      },
+      "name": "CSV Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1600, 600],
+      "id": "csv_search"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "multiplex",
+        "options": {}
+      },
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [1400, 400],
+      "id": "merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 検索結果を準備\nconst searchResults = $json || [];\nconst userMessage = $node[\"parse\"].json.userMessage;\nconst queryType = $node[\"parse\"].json.queryType;\n\n// Geminiプロンプトを構築\nlet context = '';\nif (searchResults.length > 0) {\n  context = searchResults.map((result, index) => \n    `[知識${index + 1}]\\nタイトル: ${result.title}\\n要約: ${result.summary || result.content.substring(0, 200)}`\n  ).join('\\n\\n');\n} else {\n  context = '関連する具体的な知識は見つかりませんでしたが、一般的なアドバイスを提供します。';\n}\n\nconst prompt = `あなたは恋愛コーチの「チバ」です。以下の条件に従って回答してください。\n\n## チバの特徴\n- 「チバです。」という自己紹介から始める\n- 親しみやすく直接的な語り口\n- 「どんどん」「結論」「なぜか？」などの特徴的な語彙を使う\n- 短い段落で改行を多用\n- 実体験や具体例を交える\n- 哲学的な深みを持たせる\n\n## 質問\n${userMessage}\n\n## 参考知識\n${context}\n\n## 回答要件\n- 800-1200文字程度の詳細な回答\n- チバらしい文体と語彙を使用\n- 段階的で実践的なアドバイス\n- 最後に励ましのメッセージを含める`;\n\nreturn [{\n  json: {\n    prompt: prompt,\n    searchResultsCount: searchResults.length,\n    queryType: queryType\n  }\n}];"
+      },
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1600, 400],
+      "id": "build_prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $env.GEMINI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [{\n    \"parts\": [{\n      \"text\": \"{{ $json.prompt }}\"\n    }]\n  }],\n  \"generationConfig\": {\n    \"temperature\": 0.7,\n    \"maxOutputTokens\": 1200,\n    \"topP\": 0.9,\n    \"topK\": 40\n  }\n}",
+        "options": {}
+      },
+      "name": "Generate Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1800, 400],
+      "id": "gemini"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "file",
+        "operation": "get",
+        "owner": "={{ $env.GITHUB_OWNER }}",
+        "repository": "={{ $env.GITHUB_REPO }}",
+        "filePath": "data/chiba-style-dna.json"
+      },
+      "name": "Get Style DNA",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [2000, 500],
+      "id": "style_dna",
+      "credentials": {
+        "githubOAuth2Api": {
+          "id": "github_creds",
+          "name": "GitHub"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Style DNA適用\nconst response = $node[\"gemini\"].json.candidates[0].content.parts[0].text;\nconst styleDNAContent = $json.content;\nconst styleDNA = JSON.parse(Buffer.from(styleDNAContent, 'base64').toString('utf-8'));\n\n// スタイル強化処理\nlet enhancedResponse = response;\n\n// 1. 開始パターンの確認と修正\nif (!enhancedResponse.startsWith('チバです。')) {\n  enhancedResponse = 'チバです。\\n\\n' + enhancedResponse;\n}\n\n// 2. 特徴的な語彙の強化\nconst vocabularyEnhancements = [\n  { from: /しかし/g, to: 'でも' },\n  { from: /そして/g, to: 'で、' },\n  { from: /ですから/g, to: 'だから' },\n  { from: /非常に/g, to: 'とても' },\n  { from: /重要/g, to: '大切' }\n];\n\nvocabularyEnhancements.forEach(rule => {\n  enhancedResponse = enhancedResponse.replace(rule.from, rule.to);\n});\n\n// 3. 段落構造の最適化（3-4文で改行）\nconst sentences = enhancedResponse.split(/(?<=[。！？])/g).filter(s => s.trim());\nconst optimizedParagraphs = [];\nlet currentParagraph = [];\n\nsentences.forEach((sentence, index) => {\n  currentParagraph.push(sentence.trim());\n  \n  if (currentParagraph.length >= 3 || \n      sentence.includes('？') ||\n      (index > 0 && index % 4 === 0)) {\n    optimizedParagraphs.push(currentParagraph.join(''));\n    currentParagraph = [];\n  }\n});\n\nif (currentParagraph.length > 0) {\n  optimizedParagraphs.push(currentParagraph.join(''));\n}\n\nenhancedResponse = optimizedParagraphs.join('\\n\\n');\n\n// 4. スタイルスコアの計算\nlet styleScore = 0;\n\n// 語彙スコア（25点）\nconst chibaVocabulary = ['どんどん', '結論', 'なぜか', 'だから', 'でも', 'つまり'];\nchibaVocabulary.forEach(word => {\n  if (enhancedResponse.includes(word)) styleScore += 4;\n});\n\n// 構造スコア（25点）\nconst paragraphCount = optimizedParagraphs.length;\nif (paragraphCount >= 4) styleScore += 15;\nif (enhancedResponse.includes('？')) styleScore += 10;\n\n// 文体スコア（25点）\nif (enhancedResponse.startsWith('チバです。')) styleScore += 15;\nif (enhancedResponse.match(/。\\n/g)?.length >= 3) styleScore += 10;\n\n// 感情表現スコア（25点）\nconst emotionalWords = ['嬉しい', '楽しい', '大切', '素晴らしい', '面白い'];\nemotionalWords.forEach(word => {\n  if (enhancedResponse.includes(word)) styleScore += 5;\n});\n\nreturn [{\n  json: {\n    response: enhancedResponse,\n    styleScore: Math.min(styleScore, 100),\n    originalLength: response.length,\n    enhancedLength: enhancedResponse.length,\n    paragraphCount: optimizedParagraphs.length\n  }\n}];"
+      },
+      "name": "Apply Style DNA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [2200, 400],
+      "id": "apply_style"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.styleScore }}",
+              "operation": "largerEqual",
+              "value2": 60
+            }
+          ]
+        }
+      },
+      "name": "Style Score Check",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [2400, 400],
+      "id": "style_check"
+    },
+    {
+      "parameters": {
+        "jsCode": "// スタイルスコアが低い場合の再強化\nlet response = $json.response;\nconst currentScore = $json.styleScore;\n\n// より強力なスタイル注入\nif (!response.includes('どんどん')) {\n  response = response.replace(/たくさん/g, 'どんどん');\n}\n\nif (!response.includes('結論')) {\n  response = response.replace(/まとめると/g, '結論から言うと');\n}\n\n// 自問自答パターンの追加\nif (!response.includes('？')) {\n  const sentences = response.split('。');\n  if (sentences.length > 3) {\n    sentences[2] = sentences[2] + '\\n\\nなぜか？\\n\\nそれは' + sentences[3];\n    response = sentences.join('。');\n  }\n}\n\nreturn [{\n  json: {\n    response: response,\n    styleScore: Math.min(currentScore + 20, 100),\n    reprocessed: true\n  }\n}];"
+      },
+      "name": "Enhance Style",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [2600, 500],
+      "id": "enhance_style"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "multiplex",
+        "options": {}
+      },
+      "name": "Merge Final",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [2800, 400],
+      "id": "merge_final"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINE_CHANNEL_ACCESS_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"replyToken\": \"{{ $node[\"parse\"].json.replyToken }}\",\n  \"messages\": [{\n    \"type\": \"text\",\n    \"text\": \"{{ $json.response }}\"\n  }]\n}",
+        "options": {}
+      },
+      "name": "Send LINE Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [3000, 400],
+      "id": "line_reply"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"processedAt\": \"{{ $node[\"parse\"].json.processTimestamp }}\",\n  \"styleScore\": {{ $node[\"merge_final\"].json.styleScore }},\n  \"searchResultsCount\": {{ $node[\"build_prompt\"].json.searchResultsCount || 0 }}\n}",
+        "options": {}
+      },
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [3200, 400],
+      "id": "webhook_response"
+    }
+  ],
+  "connections": {
+    "LINE Webhook": {
+      "main": [[{"node": "Parse LINE Event", "type": "main", "index": 0}]]
+    },
+    "Parse LINE Event": {
+      "main": [[{"node": "Is Greeting?", "type": "main", "index": 0}]]
+    },
+    "Is Greeting?": {
+      "main": [
+        [{"node": "Handle Greeting", "type": "main", "index": 0}],
+        [{"node": "Generate Embedding", "type": "main", "index": 0}]
+      ]
+    },
+    "Handle Greeting": {
+      "main": [[{"node": "Get Style DNA", "type": "main", "index": 0}]]
+    },
+    "Generate Embedding": {
+      "main": [[{"node": "Supabase Vector Search", "type": "main", "index": 0}]]
+    },
+    "Supabase Vector Search": {
+      "main": [[{"node": "Has Results?", "type": "main", "index": 0}]]
+    },
+    "Has Results?": {
+      "main": [
+        [{"node": "Merge Results", "type": "main", "index": 0}],
+        [{"node": "Fallback: Get CSV", "type": "main", "index": 0}]
+      ]
+    },
+    "Fallback: Get CSV": {
+      "main": [[{"node": "CSV Search", "type": "main", "index": 0}]]
+    },
+    "CSV Search": {
+      "main": [[{"node": "Merge Results", "type": "main", "index": 1}]]
+    },
+    "Merge Results": {
+      "main": [[{"node": "Build Prompt", "type": "main", "index": 0}]]
+    },
+    "Build Prompt": {
+      "main": [[{"node": "Generate Response", "type": "main", "index": 0}]]
+    },
+    "Generate Response": {
+      "main": [[{"node": "Get Style DNA", "type": "main", "index": 0}]]
+    },
+    "Get Style DNA": {
+      "main": [[{"node": "Apply Style DNA", "type": "main", "index": 0}]]
+    },
+    "Apply Style DNA": {
+      "main": [[{"node": "Style Score Check", "type": "main", "index": 0}]]
+    },
+    "Style Score Check": {
+      "main": [
+        [{"node": "Merge Final", "type": "main", "index": 0}],
+        [{"node": "Enhance Style", "type": "main", "index": 0}]
+      ]
+    },
+    "Enhance Style": {
+      "main": [[{"node": "Merge Final", "type": "main", "index": 1}]]
+    },
+    "Merge Final": {
+      "main": [[{"node": "Send LINE Reply", "type": "main", "index": 0}]]
+    },
+    "Send LINE Reply": {
+      "main": [[{"node": "Webhook Response", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "active": false,
+  "versionId": "advanced-v1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}
