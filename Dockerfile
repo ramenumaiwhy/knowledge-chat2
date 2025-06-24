@@ -17,5 +17,5 @@ USER node
 # Expose n8n port
 EXPOSE 5678
 
-# Start n8n
-CMD ["n8n"]
+# Start n8n with proper host binding
+CMD ["n8n", "start", "--host=0.0.0.0"]
