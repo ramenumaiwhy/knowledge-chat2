@@ -1,20 +1,21 @@
-FROM node:18-alpine
+FROM n8nio/n8n:latest
 
-WORKDIR /app
+# Install Python for CSV processing
+USER root
+RUN apk add --update python3 py3-pip py3-pandas
 
-# Copy only package files first for better caching
-COPY package*.json ./
+# Work directory
+WORKDIR /data
 
-# Install production dependencies only
-RUN npm ci --only=production
+# Copy workflow and data files
+COPY n8n-advanced-workflow.json /data/
+COPY data /data/data/
 
-# Copy only necessary files
-COPY webhook-server.js ./
-COPY data ./data/
-COPY lib ./lib/
+# Set user back to node
+USER node
 
-# Expose port
-EXPOSE ${PORT:-3000}
+# Expose n8n port
+EXPOSE 5678
 
-# Start webhook server
-CMD ["node", "webhook-server.js"]
+# Start n8n
+CMD ["n8n"]
