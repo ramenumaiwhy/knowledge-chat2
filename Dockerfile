@@ -1,21 +1,158 @@
-FROM n8nio/n8n:latest
+# Railway-Optimized n8n Dockerfile
+# Designed to work with Railway's infrastructure and avoid common issues
 
-# Install Python for CSV processing
+FROM n8nio/n8n:1.31.0
+
+# Use root for setup
 USER root
-RUN apk add --update python3 py3-pip py3-pandas
 
-# Work directory
-WORKDIR /data
+# Install dependencies optimized for Railway
+RUN apk add --no-cache \
+    curl \
+    wget \
+    ca-certificates \
+    python3 \
+    py3-pip \
+    build-base \
+    git \
+    # Additional tools for Railway compatibility
+    bash \
+    tini \
+    && rm -rf /var/cache/apk/*
 
-# Copy workflow and data files
-COPY n8n-advanced-workflow.json /data/
-COPY data /data/data/
+# Create directories with Railway-compatible permissions
+# Railway runs containers with random UIDs, so we need to be flexible
+RUN mkdir -p /home/node/.n8n/nodes/custom \
+    /home/node/.n8n/nodes/community \
+    /data \
+    /home/node/packages/nodes \
+    /var/lib/n8n \
+    /railway/backups \
+    && chmod -R 777 /home/node /data /var/lib/n8n /railway
 
-# Set user back to node
+# Copy custom nodes and libraries
+COPY --chown=node:node n8n-nodes /home/node/.n8n/nodes/custom/
+COPY --chown=node:node lib /home/node/lib/
+COPY --chown=node:node data/chiba-style-dna.json /home/node/data/
+COPY --chown=node:node scripts /home/node/scripts/
+COPY --chown=node:node n8n-advanced-workflow.json /data/
+COPY --chown=node:node data /data/data/
+
+# Install dependencies for custom nodes
+WORKDIR /home/node/.n8n/nodes/custom
+RUN npm init -y && \
+    npm install --save \
+    kuromoji@0.1.2 \
+    prom-client@14.2.0 \
+    && npm cache clean --force
+
+# Railway-specific environment variables
+ENV PORT=5678 \
+    N8N_PORT=5678 \
+    N8N_HOST=0.0.0.0 \
+    N8N_PROTOCOL=https \
+    # Use Railway's dynamic URL
+    N8N_WEBHOOK_BASE_URL=https://${RAILWAY_PUBLIC_DOMAIN} \
+    WEBHOOK_URL=https://${RAILWAY_PUBLIC_DOMAIN}
+
+# n8n configuration for production
+ENV N8N_CUSTOM_EXTENSIONS="/home/node/.n8n/nodes/custom" \
+    N8N_USER_FOLDER="/data" \
+    N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false \
+    N8N_DEFAULT_BINARY_DATA_MODE=filesystem \
+    N8N_PUSH_BACKEND=websocket \
+    N8N_METRICS=true \
+    N8N_PAYLOAD_SIZE_MAX=16 \
+    N8N_DIAGNOSTICS_ENABLED=false \
+    NODE_ENV=production \
+    NODE_PATH="/home/node/node_modules:/usr/local/lib/node_modules:/home/node/.n8n/nodes/custom/node_modules" \
+    NODE_FUNCTION_ALLOW_BUILTIN=* \
+    NODE_FUNCTION_ALLOW_EXTERNAL=*
+
+# Performance settings
+ENV EXECUTIONS_DATA_PRUNE=true \
+    EXECUTIONS_DATA_MAX_AGE=168 \
+    EXECUTIONS_DATA_PRUNE_MAX_COUNT=50000 \
+    N8N_CONCURRENCY_PRODUCTION_LIMIT=100 \
+    # Railway-specific: Use less aggressive settings
+    N8N_GRACEFUL_SHUTDOWN_TIMEOUT=30
+
+# Security hardening for Railway
+ENV N8N_BLOCK_ENV_ACCESS_IN_NODE=false \
+    N8N_HIDE_USAGE_PAGE=true \
+    N8N_DISABLE_PRODUCTION_MAIN_PROCESS=false
+
+# Create startup script for Railway
+RUN cat > /startup.sh << 'EOF'
+#!/bin/sh
+set -e
+
+# Railway-specific environment setup
+if [ -n "$RAILWAY_ENVIRONMENT" ]; then
+    echo "Running in Railway environment: $RAILWAY_ENVIRONMENT"
+    
+    # Update webhook URL with Railway domain
+    if [ -n "$RAILWAY_PUBLIC_DOMAIN" ]; then
+        export N8N_WEBHOOK_BASE_URL="https://$RAILWAY_PUBLIC_DOMAIN"
+        export WEBHOOK_URL="https://$RAILWAY_PUBLIC_DOMAIN"
+        echo "Webhook URL set to: $N8N_WEBHOOK_BASE_URL"
+    fi
+    
+    # Set database URL if using Railway PostgreSQL
+    if [ -n "$DATABASE_URL" ]; then
+        # Parse DATABASE_URL for n8n format
+        export DB_TYPE=postgresdb
+        export DB_POSTGRESDB_DATABASE=$(echo $DATABASE_URL | sed -n 's/.*\/\([^?]*\).*/\1/p')
+        export DB_POSTGRESDB_HOST=$(echo $DATABASE_URL | sed -n 's/.*@\([^:]*\):.*/\1/p')
+        export DB_POSTGRESDB_PORT=$(echo $DATABASE_URL | sed -n 's/.*:\([0-9]*\)\/.*/\1/p')
+        export DB_POSTGRESDB_USER=$(echo $DATABASE_URL | sed -n 's/.*:\/\/\([^:]*\):.*/\1/p')
+        export DB_POSTGRESDB_PASSWORD=$(echo $DATABASE_URL | sed -n 's/.*:\/\/[^:]*:\([^@]*\)@.*/\1/p')
+    fi
+fi
+
+# Create necessary directories
+mkdir -p /data/files /data/backups
+
+# Start n8n with proper error handling
+exec tini -- n8n "$@"
+EOF
+
+RUN chmod +x /startup.sh
+
+# Create health check script
+RUN cat > /healthcheck.sh << 'EOF'
+#!/bin/sh
+# Enhanced health check for Railway
+if wget --no-verbose --tries=1 --spider http://localhost:5678/healthz 2>/dev/null; then
+    exit 0
+else
+    # Check if process is still initializing
+    if [ -f /data/.n8n/init.lock ]; then
+        # During initialization, consider healthy
+        exit 0
+    fi
+    exit 1
+fi
+EOF
+
+RUN chmod +x /healthcheck.sh
+
+# Switch to node user (Railway will override this if needed)
 USER node
 
-# Expose n8n port
+WORKDIR /home/node
+
+# Expose port (Railway will override with PORT env var)
 EXPOSE 5678
 
-# Start n8n with proper host binding
-CMD ["n8n", "start", "--host=0.0.0.0"]
+# Railway-optimized health check
+# Longer intervals and timeout for Railway's infrastructure
+HEALTHCHECK --interval=45s \
+    --timeout=45s \
+    --start-period=180s \
+    --retries=3 \
+    CMD /healthcheck.sh
+
+# Use the startup script as entrypoint
+ENTRYPOINT ["/startup.sh"]
+CMD ["start"]

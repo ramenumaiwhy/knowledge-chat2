@@ -35,7 +35,11 @@
       "mcp__playwright__browser_file_upload",
       "mcp__playwright__browser_press_key",
       "mcp__playwright__browser_close",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(cp:*)",
+      "WebFetch(domain:railway.com)",
+      "Bash(find:*)",
+      "Bash(mv:*)"
     ],
     "deny": []
   },
