@@ -82,59 +82,12 @@ ENV N8N_BLOCK_ENV_ACCESS_IN_NODE=false \
     N8N_HIDE_USAGE_PAGE=true \
     N8N_DISABLE_PRODUCTION_MAIN_PROCESS=false
 
-# Create startup script for Railway
-RUN cat > /startup.sh << 'EOF'
-#!/bin/sh
-set -e
-
-# Railway-specific environment setup
-if [ -n "$RAILWAY_ENVIRONMENT" ]; then
-    echo "Running in Railway environment: $RAILWAY_ENVIRONMENT"
-    
-    # Update webhook URL with Railway domain
-    if [ -n "$RAILWAY_PUBLIC_DOMAIN" ]; then
-        export N8N_WEBHOOK_BASE_URL="https://$RAILWAY_PUBLIC_DOMAIN"
-        export WEBHOOK_URL="https://$RAILWAY_PUBLIC_DOMAIN"
-        echo "Webhook URL set to: $N8N_WEBHOOK_BASE_URL"
-    fi
-    
-    # Set database URL if using Railway PostgreSQL
-    if [ -n "$DATABASE_URL" ]; then
-        # Parse DATABASE_URL for n8n format
-        export DB_TYPE=postgresdb
-        export DB_POSTGRESDB_DATABASE=$(echo $DATABASE_URL | sed -n 's/.*\/\([^?]*\).*/\1/p')
-        export DB_POSTGRESDB_HOST=$(echo $DATABASE_URL | sed -n 's/.*@\([^:]*\):.*/\1/p')
-        export DB_POSTGRESDB_PORT=$(echo $DATABASE_URL | sed -n 's/.*:\([0-9]*\)\/.*/\1/p')
-        export DB_POSTGRESDB_USER=$(echo $DATABASE_URL | sed -n 's/.*:\/\/\([^:]*\):.*/\1/p')
-        export DB_POSTGRESDB_PASSWORD=$(echo $DATABASE_URL | sed -n 's/.*:\/\/[^:]*:\([^@]*\)@.*/\1/p')
-    fi
-fi
-
-# Create necessary directories
-mkdir -p /data/files /data/backups
-
-# Start n8n with proper error handling
-exec tini -- n8n "$@"
-EOF
-
+# Copy startup script
+COPY --chown=root:root scripts/startup.sh /startup.sh
 RUN chmod +x /startup.sh
 
-# Create health check script
-RUN cat > /healthcheck.sh << 'EOF'
-#!/bin/sh
-# Enhanced health check for Railway
-if wget --no-verbose --tries=1 --spider http://localhost:5678/healthz 2>/dev/null; then
-    exit 0
-else
-    # Check if process is still initializing
-    if [ -f /data/.n8n/init.lock ]; then
-        # During initialization, consider healthy
-        exit 0
-    fi
-    exit 1
-fi
-EOF
-
+# Copy health check script
+COPY --chown=root:root scripts/healthcheck.sh /healthcheck.sh
 RUN chmod +x /healthcheck.sh
 
 # Switch to node user (Railway will override this if needed)
