@@ -4,6 +4,8 @@
 [build]
 builder = "dockerfile"
 dockerfilePath = "./Dockerfile"
+buildTimeout = 1800  # 30 minutes timeout for n8n installation
+dockerIgnorePaths = [".git", "node_modules", "test*", "*.md", "docs", "temp"]
 
 [deploy]
 healthcheckPath = "/healthz"

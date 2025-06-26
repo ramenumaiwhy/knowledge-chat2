@@ -39,7 +39,8 @@
       "Bash(cp:*)",
       "WebFetch(domain:railway.com)",
       "Bash(find:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "mcp__supabase__search_docs"
     ],
     "deny": []
   },
