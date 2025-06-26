@@ -1,23 +1,19 @@
 # Railway-Optimized n8n Dockerfile
 # Designed to work with Railway's infrastructure and avoid common issues
 
-FROM n8nio/n8n:1.31.0
+FROM n8nio/n8n:latest
 
 # Use root for setup
 USER root
 
-# Install dependencies optimized for Railway
+# Install essential dependencies only
 RUN apk add --no-cache \
     curl \
     wget \
-    ca-certificates \
     python3 \
     py3-pip \
-    build-base \
     git \
-    # Additional tools for Railway compatibility
     bash \
-    tini \
     && rm -rf /var/cache/apk/*
 
 # Create directories with Railway-compatible permissions
